@@ -178,9 +178,9 @@ O projeto encontra-se em desenvolvimento e novas funcionalidades serão implemen
 
 | Nomes           | Funções |
 |-----------------|----------|
-|    |  |
-|    |  |
-|    |  |
-|    |  |
-|    |  |
-|    |  |
+| Lucas Fernando Hass   | BACKEND |
+| Edi Carlos Francisco Júnior   | BACKEND  |
+| Danilo Bolzan de Moraes  | FRONTEND |
+| Otavio Alves Brisky   | FRONTEND |
+| Pedro Oleniki Terra   | DOCUMENTAÇÃO |
+| Felipe de Oliveira Guimarães   | QA/TESTER  |
