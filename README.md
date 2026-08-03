@@ -1,6 +1,7 @@
 # Hospital Inteligente
 
 ![Status](https://img.shields.io/badge/status-Em_desenvolvimento-yellow)
+![Platform](https://img.shields.io/badge/platform-Web%20%7C%20Mobile-lightgrey)
 
 ---
 
@@ -174,3 +175,12 @@ O projeto encontra-se em desenvolvimento e novas funcionalidades serão implemen
 ---
 
 ## Time de Desenvolvimento
+
+| Nomes           | Funções |
+|-----------------|----------|
+|    |  |
+|    |  |
+|    |  |
+|    |  |
+|    |  |
+|    |  |
