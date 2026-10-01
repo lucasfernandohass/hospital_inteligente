@@ -1,0 +1,96 @@
+# ================================
+# EDITOR — VS Code
+# ================================
+.vscode/
+*.code-workspace
+
+# ================================
+# EDITOR — IntelliJ / JetBrains
+# ================================
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# ================================
+# EDITOR — Eclipse
+# ================================
+.classpath
+.project
+.settings/
+.factorypath
+
+# ================================
+# BACKEND — Java / Maven
+# ================================
+backend/target/
+backend/.mvn/wrapper/maven-wrapper.jar
+backend/mvnw.cmd
+*.class
+*.jar
+*.war
+
+# Configurações locais e segredos
+backend/src/main/resources/application-local.properties
+backend/src/main/resources/application-prod.properties
+backend/src/main/resources/application-secrets.properties
+*.p12
+*.jks
+*.pem
+
+# Logs
+backend/logs/
+*.log
+
+# ================================
+# FRONTEND — Node / React
+# ================================
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.vite/
+frontend/.eslintcache
+frontend/.stylelintcache
+
+# Ambiente
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+opencode.json
+AGENTS.md
+skills-lock.json
+SKILL.md
+
+# ================================
+# AMBIENTE RAIZ
+# ================================
+.env
+.env.*
+!.env.example
+
+# ================================
+# DOCKER
+# ================================
+docker-compose.override.yml
+
+# ================================
+# SISTEMA OPERACIONAL
+# ================================
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Linux
+*~
