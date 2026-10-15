@@ -11,7 +11,6 @@ import lombok.experimental.SuperBuilder;
 @SuperBuilder
 @Entity
 @Table(name = "exame_laboratorial")
-@PrimaryKeyJoinColumn(name = "id")
 public class ExameLaboratorial extends Exame {
 
     @Column(name = "tipo_analise", nullable = false, length = 80)

@@ -30,9 +30,6 @@ public class AdministracaoMedicamento {
     @Column(length = 500, nullable = true)
     private String observacao;
 
-    @Column(name = "prescricao_id", nullable = false)
-    private Long prescricaoId;
-
     @Column(name = "item_prescricao_id", nullable = false)
     private Long itemPrescricaoId;
 

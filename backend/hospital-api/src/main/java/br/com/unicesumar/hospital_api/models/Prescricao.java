@@ -38,7 +38,7 @@ public class Prescricao {
     @Column(name = "atendimento_id", nullable = false)
     private Long atendimentoId;
 
-    @OneToMany(mappedBy = "prescricaoId", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "prescricao", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @Builder.Default
     private List<ItemPrescricao> itens = new ArrayList<>();
 }

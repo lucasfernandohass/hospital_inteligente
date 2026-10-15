@@ -16,8 +16,9 @@ public class ItemPrescricao {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "prescricao_id", nullable = false)
-    private Long prescricaoId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "prescricao_id", nullable = false)
+    private Prescricao prescricao;
 
     @Column(name = "medicamento_id", nullable = false)
     private Long medicamentoId;
@@ -34,6 +35,6 @@ public class ItemPrescricao {
     @Column(nullable = false, length = 50)
     private String duracao;
 
-    @Column(length = 500, nullable = true)
+    @Column(length = 500)
     private String observacoes;
 }
