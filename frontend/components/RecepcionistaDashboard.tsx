@@ -1,7 +1,16 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import type { Screen } from "../App"
 import DashboardSidebar from "./DashboardSidebar"
 import ThemeToggle, { type Theme } from "./ThemeToggle"
+import useLocalStorageState from "./useLocalStorageState"
+import StaffManagement from "./StaffManagement"
+import ActivityLog from "./ActivityLog"
+import { logActivity } from "./activityStore"
+import { addLocalDaysToDateInput, APPOINTMENT_STORAGE_KEY, DOCTOR_DEMO_ID, formatLongLocalDate, includeDoctorDemoAppointments, initialReceptionAppointments, localDateInputValue, type ReceptionAppointment } from "./appointmentStore"
+import { BED_STORAGE_KEY, initialHospitalSectors, initialRegisteredBeds, initialRegisteredPatients, normalizeRegisteredBeds, PATIENT_STORAGE_KEY, type RegisteredBed, type RegisteredPatient } from "./patientStore"
+import { initialProfessionals, PROFESSIONAL_STORAGE_KEY, type Professional } from "./professionalStore"
+import { HOSPITALIZATION_STORAGE_KEY, type Hospitalization } from "./hospitalizationStore"
+import { EXAM_STORAGE_KEY, type SharedExamRequest } from "./examStore"
 
 interface Props {
   onNavigate: (screen: Screen) => void
@@ -9,7 +18,7 @@ interface Props {
   onToggleTheme: () => void
 }
 
-type Tab = "recepcao" | "cadastro-paciente" | "consulta-paciente" | "cadastro-leito" | "mapa-leitos" | "internacao" | "agendamento" | "ficha"
+type Tab = "recepcao" | "cadastro-paciente" | "consulta-paciente" | "equipe" | "atividades" | "cadastro-leito" | "mapa-leitos" | "internacao" | "agendamento" | "ficha"
 
 type IconName = "users" | "user-plus" | "search" | "bed" | "bed-plus" | "calendar" | "calendar-plus" | "file-text" | "clipboard" | "check" | "x" | "alert" | "arrow" | "chevron" | "clock" | "printer" | "send"
 
@@ -23,53 +32,7 @@ const RECEPCIONISTA = {
 // ---------------------------------------------------------------------------
 // Dados base
 // ---------------------------------------------------------------------------
-const pacientesCadastrados = [
-  {
-    id: "PAC-001",
-    nome: "João da Silva",
-    cpf: "123.456.789-00",
-    dataNasc: "15/03/1979",
-    telefone: "(11) 98765-4321",
-    convenio: "Amil Gold",
-    sexo: "M",
-  },
-  {
-    id: "PAC-002",
-    nome: "Maria Fernanda Souza",
-    cpf: "987.654.321-11",
-    dataNasc: "02/07/1964",
-    telefone: "(11) 91234-5678",
-    convenio: "Unimed",
-    sexo: "F",
-  },
-  {
-    id: "PAC-003",
-    nome: "Carlos Alberto Mendes",
-    cpf: "456.123.789-22",
-    dataNasc: "20/11/1991",
-    telefone: "(11) 92345-6789",
-    convenio: "Unimed",
-    sexo: "M",
-  },
-  {
-    id: "PAC-004",
-    nome: "Ana Beatriz Lima",
-    cpf: "321.789.456-33",
-    dataNasc: "08/06/1997",
-    telefone: "(11) 93456-7890",
-    convenio: "SulAmérica",
-    sexo: "F",
-  },
-  {
-    id: "PAC-005",
-    nome: "Roberto Nogueira Alves",
-    cpf: "741.852.963-44",
-    dataNasc: "14/09/1972",
-    telefone: "(11) 94567-8901",
-    convenio: "Amil Gold",
-    sexo: "M",
-  },
-]
+const pacientesIniciais = initialRegisteredPatients
 
 const historicoAtendimentos: Record<string, {
   data: string
@@ -126,93 +89,11 @@ const historicoAtendimentos: Record<string, {
 }
 
 // Leitos
-type Leito = {
-  id: string
-  numero: string
-  andar: string
-  tipo: "Enfermaria" | "UTI" | "Isolamento"
-  status: "Disponível" | "Ocupado" | "Higienização" | "Manutenção"
-  pacienteId?: string
-}
-
-const leitosIniciais: Leito[] = [
-  {
-    id: "L-001",
-    numero: "12A",
-    andar: "1º andar",
-    tipo: "Enfermaria",
-    status: "Ocupado",
-    pacienteId: "PAC-001",
-  },
-  {
-    id: "L-002",
-    numero: "12B",
-    andar: "1º andar",
-    tipo: "Enfermaria",
-    status: "Disponível",
-  },
-  {
-    id: "L-003",
-    numero: "08A",
-    andar: "1º andar",
-    tipo: "Enfermaria",
-    status: "Disponível",
-  },
-  {
-    id: "L-004",
-    numero: "08B",
-    andar: "1º andar",
-    tipo: "Enfermaria",
-    status: "Higienização",
-  },
-  {
-    id: "L-005",
-    numero: "14B",
-    andar: "2º andar",
-    tipo: "Isolamento",
-    status: "Ocupado",
-    pacienteId: "PAC-003",
-  },
-  {
-    id: "L-006",
-    numero: "22A",
-    andar: "3º andar",
-    tipo: "UTI",
-    status: "Ocupado",
-    pacienteId: "PAC-005",
-  },
-  {
-    id: "L-007",
-    numero: "22B",
-    andar: "3º andar",
-    tipo: "UTI",
-    status: "Disponível",
-  },
-  {
-    id: "L-008",
-    numero: "23A",
-    andar: "3º andar",
-    tipo: "UTI",
-    status: "Manutenção",
-  },
-  {
-    id: "L-009",
-    numero: "05A",
-    andar: "1º andar",
-    tipo: "Enfermaria",
-    status: "Disponível",
-  },
-  {
-    id: "L-010",
-    numero: "05B",
-    andar: "1º andar",
-    tipo: "Enfermaria",
-    status: "Disponível",
-  },
-]
+type Leito = RegisteredBed
 
 // Agenda de médicos
 const medicos = [
+  { id: DOCTOR_DEMO_ID, nome: "Dr. Pedro Campos", especialidade: "Clínica Médica" },
   { id: "MED-1", nome: "Dr. Rafael Oliveira", especialidade: "Cardiologia" },
   { id: "MED-2", nome: "Dra. Fernanda Lima", especialidade: "Pneumologia" },
   { id: "MED-3", nome: "Dr. Bruno Tavares", especialidade: "Clínica Geral" },
@@ -237,45 +118,10 @@ const horariosDisponiveis = [
   "16:30",
 ]
 
-// Agendamentos já ocupados
-const agendamentosIniciais = [
-  {
-    id: "AG-001",
-    medicoId: "MED-1",
-    data: "2026-09-15",
-    hora: "09:00",
-    paciente: "João da Silva",
-  },
-  {
-    id: "AG-002",
-    medicoId: "MED-1",
-    data: "2026-09-15",
-    hora: "10:00",
-    paciente: "Maria Fernanda Souza",
-  },
-  {
-    id: "AG-003",
-    medicoId: "MED-2",
-    data: "2026-09-15",
-    hora: "09:30",
-    paciente: "Carlos Alberto Mendes",
-  },
-  {
-    id: "AG-004",
-    medicoId: "MED-3",
-    data: "2026-09-15",
-    hora: "14:00",
-    paciente: "Ana Beatriz Lima",
-  },
-  {
-    id: "AG-005",
-    medicoId: "MED-1",
-    data: "2026-09-16",
-    hora: "08:00",
-    paciente: "Roberto Nogueira Alves",
-  },
-]
+const demoToday = localDateInputValue()
+const demoTomorrow = addLocalDaysToDateInput(1)
 
+// Agendamentos já ocupados
 const tiposExame = [
   "Hemograma",
   "Raio-X",
@@ -290,7 +136,7 @@ const examesAgendados = [
     id: "EX-001",
     paciente: "João da Silva",
     exame: "Hemograma Completo",
-    data: "2026-09-15",
+    data: demoToday,
     hora: "08:30",
     setor: "Laboratório",
   },
@@ -298,7 +144,7 @@ const examesAgendados = [
     id: "EX-002",
     paciente: "Maria Fernanda Souza",
     exame: "Ultrassom Abdominal",
-    data: "2026-09-15",
+    data: demoToday,
     hora: "11:00",
     setor: "Imagem",
   },
@@ -306,7 +152,7 @@ const examesAgendados = [
     id: "EX-003",
     paciente: "Carlos Alberto Mendes",
     exame: "Raio-X de Tórax",
-    data: "2026-09-15",
+    data: demoToday,
     hora: "13:30",
     setor: "Imagem",
   },
@@ -314,7 +160,7 @@ const examesAgendados = [
     id: "EX-004",
     paciente: "Ana Beatriz Lima",
     exame: "ECG",
-    data: "2026-09-16",
+    data: demoTomorrow,
     hora: "09:00",
     setor: "Cardiologia",
   },
@@ -524,6 +370,29 @@ export default function ReceptionistDashboard({
   onToggleTheme,
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("recepcao")
+  const [pacientesCadastrados, setPacientesCadastrados] = useLocalStorageState(PATIENT_STORAGE_KEY, pacientesIniciais)
+  const [profissionais, setProfissionais] = useLocalStorageState<Professional[]>(PROFESSIONAL_STORAGE_KEY, initialProfessionals)
+  const medicosDisponiveis = useMemo(() => {
+    const knownNames = new Set(
+      medicos.map((doctor) =>
+        doctor.nome.replace(/^(Dr\.|Dra\.)\s*/i, "").toLocaleLowerCase("pt-BR"),
+      ),
+    )
+    const novosMedicos = profissionais
+      .filter((professional) => professional.active && professional.role === "Médico")
+      .filter(
+        (professional) =>
+          !knownNames.has(
+            professional.name.replace(/^(Dr\.|Dra\.)\s*/i, "").toLocaleLowerCase("pt-BR"),
+          ),
+      )
+      .map((professional) => ({
+        id: professional.id,
+        nome: professional.name,
+        especialidade: professional.specialty || "Especialidade não informada",
+      }))
+    return [...medicos, ...novosMedicos]
+  }, [profissionais])
 
   // ----------------------------------------------------------
   // Cadastro de paciente
@@ -544,24 +413,30 @@ export default function ReceptionistDashboard({
   const [buscaPaciente, setBuscaPaciente] = useState("")
   const [pacienteEncontrado, setPacienteEncontrado] =
     useState<typeof pacientesCadastrados[0] | null>(null)
+  const [editForm, setEditForm] = useState<Pick<RegisteredPatient, "nome" | "dataNasc" | "telefone" | "convenio" | "sexo"> | null>(null)
 
   // ----------------------------------------------------------
   // Cadastro de leito
   // ----------------------------------------------------------
-  const [leitos, setLeitos] = useState<Leito[]>(leitosIniciais)
+  const [leitos, setLeitos] = useLocalStorageState<Leito[]>(BED_STORAGE_KEY, initialRegisteredBeds)
+  useEffect(() => setLeitos((current) => normalizeRegisteredBeds(current)), [setLeitos])
   const [formLeito, setFormLeito] = useState({
     numero: "",
     andar: "1º andar",
+    setor: "Clínica Médica",
     tipo: "Enfermaria" as Leito["tipo"],
   })
   const [leitoSucesso, setLeitoSucesso] = useState(false)
+  const [leitoError, setLeitoError] = useState("")
 
   // ----------------------------------------------------------
   // Mapa de leitos — filtros
   // ----------------------------------------------------------
   const [filtroStatus, setFiltroStatus] = useState<string>("Todos")
   const [filtroAndar, setFiltroAndar] = useState<string>("Todos")
+  const [filtroSetor, setFiltroSetor] = useState<string>("Todos")
   const [filtroTipo, setFiltroTipo] = useState<string>("Todos")
+  const [leitoMapaSelecionadoId, setLeitoMapaSelecionadoId] = useState<string | null>(null)
 
   // ----------------------------------------------------------
   // Internação
@@ -573,18 +448,23 @@ export default function ReceptionistDashboard({
     medicoId: "",
   })
   const [internacaoSucesso, setInternacaoSucesso] = useState(false)
+  const [internacaoError, setInternacaoError] = useState("")
+  const [internacoesLocais, setInternacoesLocais] = useLocalStorageState<Hospitalization[]>(HOSPITALIZATION_STORAGE_KEY, [])
+  const [altaEmConfirmacaoId, setAltaEmConfirmacaoId] = useState<string | null>(null)
 
   // ----------------------------------------------------------
   // Agendamento
   // ----------------------------------------------------------
-  const [agendamentos, setAgendamentos] = useState(agendamentosIniciais)
+  const [agendamentos, setAgendamentos] = useLocalStorageState<ReceptionAppointment[]>(APPOINTMENT_STORAGE_KEY, initialReceptionAppointments)
+  useEffect(() => setAgendamentos((current) => includeDoctorDemoAppointments(current)), [setAgendamentos])
   const [formAgendamento, setFormAgendamento] = useState({
-    medicoId: "MED-1",
-    data: "2026-09-15",
+    medicoId: DOCTOR_DEMO_ID,
+    data: localDateInputValue(),
     hora: "",
     pacienteId: "",
   })
   const [agendamentoSucesso, setAgendamentoSucesso] = useState(false)
+  const [examesSolicitados, setExamesSolicitados] = useLocalStorageState<SharedExamRequest[]>(EXAM_STORAGE_KEY, [])
 
   // ----------------------------------------------------------
   // Ficha de atendimento
@@ -614,10 +494,13 @@ export default function ReceptionistDashboard({
     return leitos.filter((l) => {
       if (filtroStatus !== "Todos" && l.status !== filtroStatus) return false
       if (filtroAndar !== "Todos" && l.andar !== filtroAndar) return false
+      if (filtroSetor !== "Todos" && (l.setor || l.tipo) !== filtroSetor) return false
       if (filtroTipo !== "Todos" && l.tipo !== filtroTipo) return false
       return true
     })
-  }, [leitos, filtroStatus, filtroAndar, filtroTipo])
+  }, [leitos, filtroStatus, filtroAndar, filtroSetor, filtroTipo])
+  const setoresDisponiveis = [...new Set([...initialHospitalSectors, ...leitos.map((bed) => bed.setor).filter(Boolean)])].sort((a, b) => a.localeCompare(b, "pt-BR"))
+  const leitoMapaSelecionado = leitos.find((bed) => bed.id === leitoMapaSelecionadoId)
 
   const leitosDisponiveis = leitos.filter((l) => l.status === "Disponível")
   const leitosOcupados = leitos.filter((l) => l.status === "Ocupado")
@@ -632,18 +515,43 @@ export default function ReceptionistDashboard({
       .map((a) => a.hora)
   }, [agendamentos, formAgendamento.medicoId, formAgendamento.data])
 
+  const examesDaRecepcao = useMemo(() => examesSolicitados.map((exam) => {
+    const patient = pacientesCadastrados.find((item) => item.id === exam.pacienteId)
+    const setor = exam.tipo === "ExameLaboratorial" ? "Laboratório" : exam.tipo === "ExameImagem" ? "Imagem" : "Cardiologia"
+    return {
+      ...exam,
+      paciente: patient?.nome ?? "Paciente não encontrado",
+      setor,
+      hora: exam.hora ?? "A definir",
+    }
+  }), [examesSolicitados, pacientesCadastrados])
+
   const pacientesInternados = leitos
     .filter((l) => l.status === "Ocupado" && l.pacienteId)
-    .map((l) => ({
+    .flatMap((l) => {
+      const paciente = pacientesCadastrados.find((p) => p.id === l.pacienteId)
+      if (!paciente) return []
+      const internacao = internacoesLocais.find((item) => item.pacienteId === l.pacienteId && item.status === "Ativa")
+      return [{
       leito: l,
-      paciente: pacientesCadastrados.find((p) => p.id === l.pacienteId)!,
-    }))
+      paciente,
+      internacao,
+      }]
+    })
+  const pacientesDisponiveisParaInternacao = pacientesCadastrados.filter((patient) => !leitos.some((bed) => bed.status === "Ocupado" && bed.pacienteId === patient.id))
 
   // ----------------------------------------------------------
   // Handlers
   // ----------------------------------------------------------
   const handleCadastroPaciente = () => {
     if (!podeCadastrar) return
+    const novoPaciente = {
+      id: "PAC-" + String(Math.max(0, ...pacientesCadastrados.map((patient) => Number(patient.id.replace(/\D/g, "")))) + 1).padStart(3, "0"),
+      ...formPaciente,
+    }
+    setPacientesCadastrados((current) => [...current, novoPaciente])
+    setPacienteEncontrado(novoPaciente)
+    logActivity("Recepção", "Cadastro concluído", "Paciente", novoPaciente.id)
     setCadastroSucesso(true)
     setTimeout(() => {
       setCadastroSucesso(false)
@@ -667,23 +575,49 @@ export default function ReceptionistDashboard({
         p.nome.toLowerCase().includes(termo),
     )
     setPacienteEncontrado(encontrado ?? null)
+    setEditForm(null)
+  }
+
+  const handleSalvarEdicaoPaciente = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!pacienteEncontrado || !editForm) return
+    const atualizado = { ...pacienteEncontrado, ...editForm }
+    setPacientesCadastrados((current) => current.map((patient) => patient.id === atualizado.id ? atualizado : patient))
+    setPacienteEncontrado(atualizado)
+    setEditForm(null)
+    logActivity("Recepção", "Cadastro atualizado", "Paciente", atualizado.id)
   }
 
   const handleCadastroLeito = () => {
-    if (!formLeito.numero.trim()) return
+    const numero = formLeito.numero.trim().toLocaleUpperCase("pt-BR")
+    if (!numero) return
+    if (leitos.some((bed) => bed.numero.toLocaleUpperCase("pt-BR") === numero)) {
+      setLeitoError("Já existe um leito com esse número.")
+      return
+    }
     const novo: Leito = {
       id: `L-${String(leitos.length + 1).padStart(3, "0")}`,
-      numero: formLeito.numero,
+      numero,
       andar: formLeito.andar,
+      setor: formLeito.setor,
       tipo: formLeito.tipo,
       status: "Disponível",
     }
     setLeitos((current) => [...current, novo])
+    logActivity("Recepção", "Cadastro concluído", "Leito", `${novo.id} · ${novo.numero} · ${novo.setor} · ${novo.andar}`)
+    setLeitoError("")
     setLeitoSucesso(true)
     setTimeout(() => {
       setLeitoSucesso(false)
-      setFormLeito({ numero: "", andar: "1º andar", tipo: "Enfermaria" })
+      setFormLeito({ numero: "", andar: "1º andar", setor: "Clínica Médica", tipo: "Enfermaria" })
     }, 2500)
+  }
+
+  const handleLiberarLeito = (leitoId: string) => {
+    const leito = leitos.find((item) => item.id === leitoId)
+    if (!leito || leito.status !== "Higienização") return
+    setLeitos((current) => current.map((item) => item.id === leitoId ? { ...item, status: "Disponível" } : item))
+    logActivity("Recepção", "Leito liberado após higienização", "Leito", `${leito.numero} · ${leito.andar}`)
   }
 
   const handleCadastroInternacao = () => {
@@ -693,6 +627,31 @@ export default function ReceptionistDashboard({
       !formInternacao.motivo.trim()
     )
       return
+    const paciente = pacientesCadastrados.find((item) => item.id === formInternacao.pacienteId)
+    const leitoSelecionado = leitos.find((item) => item.id === formInternacao.leitoId)
+    const medico = medicosDisponiveis.find((item) => item.id === formInternacao.medicoId)
+    if (!paciente || !leitoSelecionado || leitoSelecionado.status !== "Disponível") {
+      setInternacaoError("O paciente ou leito selecionado não está mais disponível.")
+      return
+    }
+    if (leitos.some((item) => item.status === "Ocupado" && item.pacienteId === paciente.id)) {
+      setInternacaoError("Este paciente já possui um leito ocupado.")
+      return
+    }
+    const admission: Hospitalization = {
+      id: "INT-LOCAL-" + Date.now(),
+      pacienteId: paciente.id,
+      leitoId: leitoSelecionado.id,
+      leito: leitoSelecionado.numero,
+      setor: leitoSelecionado.setor || leitoSelecionado.tipo,
+      motivo: formInternacao.motivo.trim(),
+      medicoId: formInternacao.medicoId,
+      medico: medico?.nome ?? "Equipe médica",
+      dataEntrada: new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(new Date()),
+      dataAltaPrevista: "A definir",
+      status: "Ativa",
+    }
+    setInternacoesLocais((current) => [admission, ...current])
     setLeitos((current) =>
       current.map((l) =>
         l.id === formInternacao.leitoId
@@ -700,6 +659,8 @@ export default function ReceptionistDashboard({
           : l,
       ),
     )
+    logActivity("Recepção", "Internação registrada", paciente.id, `${admission.id} · Leito ${admission.leito} · ${admission.motivo}`)
+    setInternacaoError("")
     setInternacaoSucesso(true)
     setTimeout(() => {
       setInternacaoSucesso(false)
@@ -710,6 +671,17 @@ export default function ReceptionistDashboard({
         medicoId: "",
       })
     }, 2500)
+  }
+
+  const handleConfirmarAlta = (leitoId: string) => {
+    const leito = leitos.find((item) => item.id === leitoId)
+    if (!leito || leito.status !== "Ocupado") return
+    const pacienteId = leito.pacienteId ?? ""
+    const dataAlta = new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(new Date())
+    setInternacoesLocais((current) => current.map((item) => item.leitoId === leitoId && item.status === "Ativa" ? { ...item, status: "Alta", dataAlta } : item))
+    setLeitos((current) => current.map((item) => item.id === leitoId ? { ...item, status: "Higienização", pacienteId: undefined } : item))
+    logActivity("Recepção", "Alta registrada", pacienteId, `Leito ${leito.numero} · ${dataAlta}`)
+    setAltaEmConfirmacaoId(null)
   }
 
   const handleAgendamento = () => {
@@ -728,24 +700,36 @@ export default function ReceptionistDashboard({
       data: formAgendamento.data,
       hora: formAgendamento.hora,
       paciente: paciente?.nome ?? "",
+      pacienteId: formAgendamento.pacienteId,
+      status: "Agendada" as const,
     }
     setAgendamentos((current) => [...current, novo])
+    logActivity("Recepção", "Agendamento criado", "Consulta", `${novo.id} · ${formAgendamento.pacienteId} · ${novo.data} ${novo.hora}`)
     setAgendamentoSucesso(true)
     setTimeout(() => {
       setAgendamentoSucesso(false)
       setFormAgendamento({
-        medicoId: "MED-1",
-        data: "2026-09-15",
+        medicoId: DOCTOR_DEMO_ID,
+        data: localDateInputValue(),
         hora: "",
         pacienteId: "",
       })
     }, 2500)
   }
 
+  const handleIniciarExame = (examId: string) => {
+    const exam = examesSolicitados.find((item) => item.id === examId)
+    if (!exam || exam.status !== "agendado") return
+    setExamesSolicitados((current) => current.map((item) => item.id === examId ? { ...item, status: "em andamento" } : item))
+    logActivity("Recepção", "Exame encaminhado para execução", exam.pacienteId, `${exam.nome} · ${exam.id}`)
+  }
+
   const tabs: { key: Tab; label: string }[] = [
     { key: "recepcao", label: "Central da Recepção" },
     { key: "cadastro-paciente", label: "Cadastrar Paciente" },
     { key: "consulta-paciente", label: "Consultar Paciente" },
+    { key: "equipe", label: "Equipe e Profissionais" },
+    { key: "atividades", label: "Registro de Atividades" },
     { key: "cadastro-leito", label: "Cadastrar Leito" },
     { key: "mapa-leitos", label: "Mapa de Leitos" },
     { key: "internacao", label: "Internação" },
@@ -762,7 +746,7 @@ export default function ReceptionistDashboard({
     subtitle: string
     action?: React.ReactNode
   }) => (
-    <div className="flex items-start justify-between gap-4 mb-6">
+    <div className="flex flex-col items-stretch justify-between gap-3 mb-6 sm:flex-row sm:items-start sm:gap-4">
       <div>
         <h1
           className="text-2xl md:text-3xl font-semibold tracking-tight"
@@ -881,12 +865,14 @@ export default function ReceptionistDashboard({
         </header>
 
         <main className="dashboard-main mx-auto w-full min-w-0 max-w-7xl flex-1 px-4 pb-24 pt-20 sm:px-6 xl:p-6">
+          {activeTab === "equipe" && <StaffManagement professionals={profissionais} setProfessionals={setProfissionais} />}
+          {activeTab === "atividades" && <ActivityLog />}
           {/* ============ CENTRAL DA RECEPÇÃO ============ */}
           {activeTab === "recepcao" && (
             <div className="fade-in">
               <PageTitle
                 title={`Bom dia, ${RECEPCIONISTA.nome.split(" ")[0]}`}
-                subtitle="Segunda-feira, 15 de setembro de 2026 · Visão unificada da recepção"
+                subtitle={`${formatLongLocalDate()} · Visão unificada da recepção`}
               />
 
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -894,7 +880,7 @@ export default function ReceptionistDashboard({
                   {
                     label: "Consultas hoje",
                     value: String(
-                      agendamentos.filter((a) => a.data === "2026-09-15")
+                      agendamentos.filter((a) => a.data === localDateInputValue())
                         .length,
                     ),
                     icon: "calendar" as IconName,
@@ -902,7 +888,7 @@ export default function ReceptionistDashboard({
                   },
                   {
                     label: "Exames marcados",
-                    value: String(examesAgendados.length),
+                    value: String(examesAgendados.length + examesDaRecepcao.length),
                     icon: "clipboard" as IconName,
                     detail: "Hoje e amanhã",
                   },
@@ -993,9 +979,9 @@ export default function ReceptionistDashboard({
                     </button>
                   </div>
                   <div className="flex flex-col gap-2.5">
-                    {medicos.map((m) => {
+                    {medicosDisponiveis.map((m) => {
                       const consultas = agendamentos.filter(
-                        (a) => a.medicoId === m.id && a.data === "2026-09-15",
+                        (a) => a.medicoId === m.id && a.data === localDateInputValue(),
                       )
                       return (
                         <div
@@ -1117,6 +1103,18 @@ export default function ReceptionistDashboard({
                         >
                           {e.data.split("-").reverse().join("/")}
                         </span>
+                      </div>
+                    ))}
+                    {examesDaRecepcao.map((exam) => (
+                      <div key={exam.id} className="flex flex-wrap items-center gap-3 rounded-lg p-3" style={{ background: "var(--secondary)" }}>
+                        <div className="w-10 shrink-0 text-center font-mono text-xs font-bold" style={{ color: "var(--primary)" }}>{exam.hora}</div>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-xs font-semibold" style={{ color: "var(--foreground)" }}>{exam.nome}</div>
+                          <div className="truncate text-[10px]" style={{ color: "var(--muted-foreground)" }}>{exam.paciente} · {exam.setor} · Solicitado por {exam.solicitante}</div>
+                        </div>
+                        <span className="shrink-0 rounded-full px-2 py-1 text-[9px] font-semibold" style={{ background: "var(--card)", color: "var(--primary)" }}>{exam.status === "agendado" ? "Solicitado" : exam.status === "em andamento" ? "Em andamento" : "Resultado disponível"}</span>
+                        {exam.status === "agendado" && <button type="button" onClick={() => handleIniciarExame(exam.id)} className="min-h-8 rounded-lg px-2.5 text-[10px] font-semibold" style={{ background: "var(--card)", color: "var(--primary)" }}>Iniciar exame</button>}
+                        <span className="shrink-0 text-[10px] font-mono" style={{ color: "var(--muted-foreground)" }}>{exam.data}</span>
                       </div>
                     ))}
                   </div>
@@ -1381,7 +1379,7 @@ export default function ReceptionistDashboard({
                     >
                       Campos obrigatórios são validados automaticamente
                     </span>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       {cadastroSucesso && (
                         <span
                           className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg"
@@ -1611,6 +1609,36 @@ export default function ReceptionistDashboard({
                         </div>
                       ))}
                     </div>
+                    {editForm ? (
+                      <form onSubmit={handleSalvarEdicaoPaciente} className="mt-5 space-y-3 border-t pt-4" style={{ borderColor: "var(--border)" }}>
+                        <h3 className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>Editar dados cadastrais</h3>
+                        <label className="block text-[10px] font-medium" style={{ color: "var(--muted-foreground)" }}>Nome completo
+                          <input required minLength={3} value={editForm.nome} onChange={(event) => setEditForm({ ...editForm, nome: event.target.value })} className="mt-1 min-h-11 w-full rounded-lg border px-3 text-sm" style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--foreground)" }} />
+                        </label>
+                        <label className="block text-[10px] font-medium" style={{ color: "var(--muted-foreground)" }}>Nascimento
+                          <input required value={editForm.dataNasc} onChange={(event) => setEditForm({ ...editForm, dataNasc: event.target.value })} placeholder="DD/MM/AAAA" className="mt-1 min-h-11 w-full rounded-lg border px-3 text-sm" style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--foreground)" }} />
+                        </label>
+                        <label className="block text-[10px] font-medium" style={{ color: "var(--muted-foreground)" }}>Telefone
+                          <input required value={editForm.telefone} onChange={(event) => setEditForm({ ...editForm, telefone: event.target.value })} className="mt-1 min-h-11 w-full rounded-lg border px-3 text-sm" style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--foreground)" }} />
+                        </label>
+                        <label className="block text-[10px] font-medium" style={{ color: "var(--muted-foreground)" }}>Convênio
+                          <input required value={editForm.convenio} onChange={(event) => setEditForm({ ...editForm, convenio: event.target.value })} className="mt-1 min-h-11 w-full rounded-lg border px-3 text-sm" style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--foreground)" }} />
+                        </label>
+                        <label className="block text-[10px] font-medium" style={{ color: "var(--muted-foreground)" }}>Sexo
+                          <select required value={editForm.sexo} onChange={(event) => setEditForm({ ...editForm, sexo: event.target.value })} className="mt-1 min-h-11 w-full rounded-lg border px-3 text-sm" style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--foreground)" }}>
+                            <option value="">Selecione</option><option value="M">Masculino</option><option value="F">Feminino</option><option value="Outro">Outro</option>
+                          </select>
+                        </label>
+                        <div className="flex flex-col gap-2 min-[420px]:flex-row">
+                          <button type="submit" className="min-h-10 flex-1 rounded-lg px-3 text-xs font-semibold" style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}>Salvar alterações</button>
+                          <button type="button" onClick={() => setEditForm(null)} className="min-h-10 rounded-lg px-3 text-xs font-semibold" style={{ background: "var(--secondary)", color: "var(--primary)" }}>Cancelar</button>
+                        </div>
+                      </form>
+                    ) : (
+                      <button type="button" onClick={() => setEditForm({ nome: pacienteEncontrado.nome, dataNasc: pacienteEncontrado.dataNasc, telefone: pacienteEncontrado.telefone, convenio: pacienteEncontrado.convenio, sexo: pacienteEncontrado.sexo })} className="mt-5 min-h-10 w-full rounded-lg px-3 text-xs font-semibold" style={{ background: "var(--secondary)", color: "var(--primary)" }}>
+                        Editar cadastro
+                      </button>
+                    )}
                   </div>
 
                   <div className="lg:col-span-2">
@@ -1722,13 +1750,14 @@ export default function ReceptionistDashboard({
                     border: "1px solid var(--border)",
                   }}
                 >
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                     <Input
                       label="Número do leito"
                       value={formLeito.numero}
-                      onChange={(v) =>
-                        setFormLeito({ ...formLeito, numero: v.toUpperCase() })
-                      }
+                      onChange={(value) => {
+                        setLeitoError("")
+                        setFormLeito({ ...formLeito, numero: value.toUpperCase() })
+                      }}
                       placeholder="Ex.: 12A"
                       required
                     />
@@ -1755,6 +1784,15 @@ export default function ReceptionistDashboard({
                         <option value="2º andar">2º andar</option>
                         <option value="3º andar">3º andar</option>
                       </select>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[11px] font-semibold" style={{ color: "var(--foreground)" }}>Setor<span style={{ color: "#C0392B" }}> *</span></label>
+                      <select value={formLeito.setor || "__outro__"} onChange={(event) => setFormLeito({ ...formLeito, setor: event.target.value === "__outro__" ? "" : event.target.value })} className="h-10 rounded-lg px-3 text-xs outline-none" style={{ background: "var(--card)", border: "1px solid var(--border)", color: "var(--foreground)" }}>
+                        {setoresDisponiveis.map((sector) => <option key={sector} value={sector}>{sector}</option>)}
+                        {formLeito.setor && !setoresDisponiveis.includes(formLeito.setor) && <option value={formLeito.setor}>{formLeito.setor}</option>}
+                        <option value="__outro__">Cadastrar outro setor…</option>
+                      </select>
+                      {!formLeito.setor && <input autoFocus required value={formLeito.setor} onChange={(event) => setFormLeito({ ...formLeito, setor: event.target.value })} placeholder="Nome do novo setor" className="min-h-10 rounded-lg border px-3 text-xs" style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--foreground)" }} />}
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label
@@ -1785,6 +1823,8 @@ export default function ReceptionistDashboard({
                     </div>
                   </div>
 
+                  {leitoError && <p role="alert" className="text-xs font-semibold text-red-600">{leitoError}</p>}
+
                   <div
                     className="flex items-center justify-between pt-4"
                     style={{ borderTop: "1px solid var(--border)" }}
@@ -1796,7 +1836,7 @@ export default function ReceptionistDashboard({
                       Leitos cadastrados entram como "Disponível"
                       automaticamente.
                     </span>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       {leitoSucesso && (
                         <span
                           className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg"
@@ -1808,7 +1848,7 @@ export default function ReceptionistDashboard({
                       )}
                       <button
                         onClick={handleCadastroLeito}
-                        disabled={!formLeito.numero.trim()}
+                        disabled={!formLeito.numero.trim() || !formLeito.setor.trim()}
                         className="h-9 px-4 rounded-lg text-xs font-semibold text-white cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                         style={{ background: "var(--primary)" }}
                       >
@@ -1852,7 +1892,7 @@ export default function ReceptionistDashboard({
                               className="text-[10px]"
                               style={{ color: "var(--muted-foreground)" }}
                             >
-                              {l.andar} · {l.tipo}
+                              {l.setor || l.tipo} · {l.andar} · {l.tipo}
                             </div>
                           </div>
                           <span
@@ -1906,6 +1946,13 @@ export default function ReceptionistDashboard({
                     <option value="Ocupado">Ocupado</option>
                     <option value="Higienização">Higienização</option>
                     <option value="Manutenção">Manutenção</option>
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-[9px] uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Setor</span>
+                  <select value={filtroSetor} onChange={(event) => setFiltroSetor(event.target.value)} aria-label="Filtrar leitos por setor" className="h-9 rounded-lg px-3 text-xs outline-none" style={{ background: "var(--secondary)", border: "1px solid var(--border)", color: "var(--foreground)" }}>
+                    <option value="Todos">Todos</option>
+                    {[...new Set(leitos.map((bed) => bed.setor || bed.tipo))].sort((a, b) => a.localeCompare(b, "pt-BR")).map((sector) => <option key={sector} value={sector}>{sector}</option>)}
                   </select>
                 </div>
                 <div className="flex flex-col gap-1">
@@ -1973,7 +2020,7 @@ export default function ReceptionistDashboard({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 min-[420px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                 {leitosFiltrados.map((l) => {
                   const sc = leitoStatusColor[l.status]
                   const pac = l.pacienteId
@@ -1989,23 +2036,24 @@ export default function ReceptionistDashboard({
                         borderLeft: `4px solid ${sc.dot}`,
                       }}
                     >
-                      <div className="flex items-center justify-between mb-2">
-                        <span
-                          className="text-sm font-bold"
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          aria-label={`Ver detalhes do leito ${l.numero}`}
+                          aria-pressed={leitoMapaSelecionadoId === l.id}
+                          onClick={() => setLeitoMapaSelecionadoId(l.id)}
+                          className="min-h-9 rounded-lg px-2 text-left text-sm font-bold underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
                           style={{ color: "var(--foreground)" }}
                         >
                           Leito {l.numero}
-                        </span>
-                        <span
-                          className="w-2.5 h-2.5 rounded-full"
-                          style={{ background: sc.dot }}
-                        />
+                        </button>
+                        <span className="w-2.5 h-2.5 rounded-full" style={{ background: sc.dot }} />
                       </div>
                       <div
                         className="text-[10px]"
                         style={{ color: "var(--muted-foreground)" }}
                       >
-                        {l.andar}
+                        {l.setor || l.tipo} · {l.andar}
                       </div>
                       <div className="flex items-center gap-1.5 mt-1">
                         <span
@@ -2047,10 +2095,58 @@ export default function ReceptionistDashboard({
                           </span>
                         )}
                       </div>
+                      {l.status === "Higienização" && (
+                        <button type="button" onClick={() => handleLiberarLeito(l.id)} className="mt-3 min-h-10 w-full rounded-lg px-2 text-[10px] font-semibold" style={{ background: "var(--secondary)", color: "var(--primary)" }}>
+                          Marcar como disponível
+                        </button>
+                      )}
                     </div>
                   )
                 })}
               </div>
+
+              {leitoMapaSelecionado && (
+                <section className="mt-5 rounded-[var(--radius)] border p-4 sm:p-5" style={{ background: "var(--card)", borderColor: "var(--border)" }} aria-labelledby="leito-selecionado-titulo">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 id="leito-selecionado-titulo" className="text-base font-bold" style={{ color: "var(--foreground)" }}>Leito {leitoMapaSelecionado.numero}</h3>
+                      <p className="mt-1 text-xs" style={{ color: "var(--muted-foreground)" }}>{leitoMapaSelecionado.setor || leitoMapaSelecionado.tipo} · {leitoMapaSelecionado.andar} · {leitoMapaSelecionado.tipo}</p>
+                    </div>
+                    <span className="rounded-full px-2.5 py-1 text-[10px] font-semibold" style={{ background: leitoStatusColor[leitoMapaSelecionado.status].bg, color: leitoStatusColor[leitoMapaSelecionado.status].text }}>{leitoMapaSelecionado.status}</span>
+                  </div>
+                  {leitoMapaSelecionado.pacienteId ? (
+                    <div className="mt-3 rounded-xl p-3 text-xs" style={{ background: "var(--background)", color: "var(--muted-foreground)" }}>
+                      {(() => {
+                        const patient = pacientesCadastrados.find((item) => item.id === leitoMapaSelecionado.pacienteId)
+                        const admission = internacoesLocais.find((item) => item.leitoId === leitoMapaSelecionado.id && item.status === "Ativa")
+                        return (
+                          <>
+                            <p className="font-semibold" style={{ color: "var(--foreground)" }}>{patient?.nome ?? "Paciente não encontrado"} · {patient?.id}</p>
+                            {admission && <p className="mt-1">Motivo: {admission.motivo} · Responsável: {admission.medico} · Entrada: {admission.dataEntrada}</p>}
+                          </>
+                        )
+                      })()}
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-xs" style={{ color: "var(--muted-foreground)" }}>{leitoMapaSelecionado.status === "Disponível" ? "Este leito pode receber uma internação." : "Este leito não está disponível para internação."}</p>
+                  )}
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {leitoMapaSelecionado.status === "Disponível" && pacientesDisponiveisParaInternacao.length > 0 && (
+                      <button type="button" onClick={() => {
+                        setFormInternacao((current) => ({ ...current, leitoId: leitoMapaSelecionado.id }))
+                        setActiveTab("internacao")
+                      }} className="min-h-10 rounded-lg px-3 text-xs font-semibold" style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}>Internar paciente neste leito</button>
+                    )}
+                    {leitoMapaSelecionado.status === "Ocupado" && (
+                      <button type="button" onClick={() => setActiveTab("internacao")} className="min-h-10 rounded-lg px-3 text-xs font-semibold" style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}>Gerenciar internação e alta</button>
+                    )}
+                    {leitoMapaSelecionado.status === "Higienização" && (
+                      <button type="button" onClick={() => handleLiberarLeito(leitoMapaSelecionado.id)} className="min-h-10 rounded-lg px-3 text-xs font-semibold" style={{ background: "var(--secondary)", color: "var(--primary)" }}>Marcar como disponível</button>
+                    )}
+                    <button type="button" onClick={() => setLeitoMapaSelecionadoId(null)} className="min-h-10 rounded-lg px-3 text-xs font-semibold" style={{ background: "var(--secondary)", color: "var(--muted-foreground)" }}>Fechar detalhes</button>
+                  </div>
+                </section>
+              )}
 
               {leitosFiltrados.length === 0 && (
                 <div
@@ -2116,9 +2212,9 @@ export default function ReceptionistDashboard({
                         }}
                       >
                         <option value="">Selecione o paciente...</option>
-                        {pacientesCadastrados.map((p) => (
+                        {pacientesDisponiveisParaInternacao.map((p) => (
                           <option key={p.id} value={p.id}>
-                            {p.nome} — {p.cpf}
+                            {p.nome} — {p.id}
                           </option>
                         ))}
                       </select>
@@ -2150,7 +2246,7 @@ export default function ReceptionistDashboard({
                         <option value="">Selecione o leito...</option>
                         {leitosDisponiveis.map((l) => (
                           <option key={l.id} value={l.id}>
-                            Leito {l.numero} · {l.andar} · {l.tipo}
+                            Leito {l.numero} · {l.setor || l.tipo} · {l.andar} · {l.tipo}
                           </option>
                         ))}
                       </select>
@@ -2179,7 +2275,7 @@ export default function ReceptionistDashboard({
                         }}
                       >
                         <option value="">Selecione...</option>
-                        {medicos.map((m) => (
+                        {medicosDisponiveis.map((m) => (
                           <option key={m.id} value={m.id}>
                             {m.nome} — {m.especialidade}
                           </option>
@@ -2209,7 +2305,7 @@ export default function ReceptionistDashboard({
                       Ao confirmar, o leito passa automaticamente para
                       "Ocupado".
                     </span>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       {internacaoSucesso && (
                         <span
                           className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg"
@@ -2219,12 +2315,15 @@ export default function ReceptionistDashboard({
                           Internação registrada
                         </span>
                       )}
+                      {internacaoError && <span role="alert" className="text-xs font-semibold text-red-600">{internacaoError}</span>}
                       <button
                         onClick={handleCadastroInternacao}
                         disabled={
                           !formInternacao.pacienteId ||
                           !formInternacao.leitoId ||
                           !formInternacao.motivo.trim()
+                          || pacientesDisponiveisParaInternacao.length === 0
+                          || leitosDisponiveis.length === 0
                         }
                         className="h-9 px-4 rounded-lg text-xs font-semibold text-white cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                         style={{ background: "var(--primary)" }}
@@ -2265,9 +2364,23 @@ export default function ReceptionistDashboard({
                           className="text-[10px] mt-0.5"
                           style={{ color: "var(--muted-foreground)" }}
                         >
-                          Leito {pi.leito.numero} · {pi.leito.andar} ·{" "}
+                          Leito {pi.leito.numero} · {pi.leito.setor || pi.leito.tipo} · {pi.leito.andar} ·{" "}
                           {pi.leito.tipo}
                         </div>
+                        {pi.internacao && (
+                          <div className="mt-2 space-y-1 text-[10px]" style={{ color: "var(--muted-foreground)" }}>
+                            <p>Motivo: {pi.internacao.motivo}</p>
+                            <p>Responsável: {pi.internacao.medico} · Entrada: {pi.internacao.dataEntrada}</p>
+                          </div>
+                        )}
+                        {altaEmConfirmacaoId === pi.leito.id ? (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button type="button" onClick={() => handleConfirmarAlta(pi.leito.id)} className="min-h-9 rounded-lg px-3 text-[10px] font-semibold" style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}>Confirmar alta</button>
+                            <button type="button" onClick={() => setAltaEmConfirmacaoId(null)} className="min-h-9 rounded-lg px-3 text-[10px] font-semibold" style={{ background: "var(--card)", color: "var(--muted-foreground)" }}>Cancelar</button>
+                          </div>
+                        ) : (
+                          <button type="button" onClick={() => setAltaEmConfirmacaoId(pi.leito.id)} className="mt-3 min-h-9 w-full rounded-lg px-3 text-[10px] font-semibold" style={{ background: "var(--card)", color: "var(--primary)", border: "1px solid var(--border)" }}>Dar alta</button>
+                        )}
                       </div>
                     ))}
                     {pacientesInternados.length === 0 && (
@@ -2323,7 +2436,7 @@ export default function ReceptionistDashboard({
                           color: "var(--foreground)",
                         }}
                       >
-                        {medicos.map((m) => (
+                        {medicosDisponiveis.map((m) => (
                           <option key={m.id} value={m.id}>
                             {m.nome} — {m.especialidade}
                           </option>
@@ -2447,7 +2560,7 @@ export default function ReceptionistDashboard({
                     >
                       Horários riscados já estão ocupados.
                     </span>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       {agendamentoSucesso && (
                         <span
                           className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg"
@@ -2497,7 +2610,7 @@ export default function ReceptionistDashboard({
                       .map((a) => (
                         <div
                           key={a.id}
-                          className="p-2.5 rounded-lg flex items-center gap-3"
+                          className="p-2.5 rounded-lg flex flex-wrap items-center gap-3"
                           style={{ background: "var(--secondary)" }}
                         >
                           <span
@@ -2512,6 +2625,7 @@ export default function ReceptionistDashboard({
                           >
                             {a.paciente}
                           </span>
+                          <span className="ml-auto shrink-0 rounded-full px-2 py-1 text-[9px] font-semibold" style={{ background: "var(--card)", color: a.status === "Concluída" ? "var(--accent)" : a.status === "Em atendimento" ? "var(--primary)" : "var(--muted-foreground)" }}>{a.status ?? "Agendada"}</span>
                         </div>
                       ))}
                     {agendamentos.filter(
@@ -2614,7 +2728,7 @@ export default function ReceptionistDashboard({
                             className="text-[11px] mt-0.5"
                             style={{ color: "var(--muted-foreground)" }}
                           >
-                            Ficha de Atendimento · Emitida em 15/09/2026 14:32
+                            Ficha de Atendimento · Emitida em {new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date())}
                           </div>
                         </div>
                         <div className="text-right">
@@ -2690,6 +2804,7 @@ export default function ReceptionistDashboard({
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
                           {[
                             ["Leito", leito.numero],
+                            ["Setor", leito.setor || leito.tipo],
                             ["Andar", leito.andar],
                             ["Tipo de leito", leito.tipo],
                             ["Status", leito.status],

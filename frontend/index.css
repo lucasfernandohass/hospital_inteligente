@@ -298,3 +298,55 @@ body {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+.ecg-trace {
+  stroke-dasharray: 360;
+  stroke-dashoffset: 360;
+  animation: ecg-draw 2.4s linear infinite;
+}
+
+@keyframes ecg-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ecg-trace {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
+
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+
+  .monitoring-printable,
+  .monitoring-printable * {
+    visibility: visible !important;
+  }
+
+  .monitoring-printable {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+    border: 0 !important;
+    background: #fff !important;
+    color: #0d1b2a !important;
+    box-shadow: none !important;
+    print-color-adjust: exact;
+  }
+
+  .monitoring-printable button {
+    display: none !important;
+  }
+
+  .monitoring-printable .max-h-56 {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+}

@@ -1,6 +1,7 @@
 import { useState } from "react"
 import logo from "./logo.png"
 import ThemeToggle, { type Theme } from "./ThemeToggle"
+import { logActivity } from "./activityStore"
 
 interface SidebarTab {
   key: string
@@ -202,7 +203,10 @@ export default function DashboardSidebar({
     <div className="border-t p-3" style={{ borderColor: "var(--border)" }}>
       <button
         type="button"
-        onClick={onLogout}
+        onClick={() => {
+          logActivity(role, "Sessão encerrada", "Acesso demonstrativo", name)
+          onLogout()
+        }}
         className="min-h-11 w-full rounded-xl px-3 text-left text-sm font-semibold text-red-600 transition-colors hover:bg-red-500/10"
       >
         Sair da conta

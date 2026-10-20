@@ -2,6 +2,7 @@ import { useState } from "react"
 import type { Screen } from "../App"
 import logo from "./logo.png"
 import ThemeToggle, { type Theme } from "./ThemeToggle"
+import { logActivity } from "./activityStore"
 
 interface Props {
   onNavigate: (screen: Screen) => void
@@ -42,6 +43,7 @@ export default function LoginPage({ onNavigate, theme, onToggleTheme }: Props) {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
+  const [loginNotice, setLoginNotice] = useState("")
 
   const selectedRole = roles.find((r) => r.key === role)
 
@@ -57,6 +59,7 @@ export default function LoginPage({ onNavigate, theme, onToggleTheme }: Props) {
     setLoading(true)
     setTimeout(() => {
       setLoading(false)
+      logActivity(selectedRole?.label ?? "Equipe", "Sessão iniciada", "Acesso demonstrativo", "Login de demonstração")
       if (role === "doutor") onNavigate("doutor")
       else if (role === "enfermeira") onNavigate("enfermeira")
       else onNavigate("recepcionista")
@@ -152,6 +155,7 @@ export default function LoginPage({ onNavigate, theme, onToggleTheme }: Props) {
                   setRole(r.key)
                   setEmail("")
                   setPassword("")
+                  setLoginNotice("")
                 }}
                 className="flex-1 flex items-center justify-center py-3.5 px-2 rounded-[var(--radius)] border-2 transition-all duration-200 cursor-pointer"
                 style={{
@@ -229,12 +233,9 @@ export default function LoginPage({ onNavigate, theme, onToggleTheme }: Props) {
 
               {/* Esqueceu? agora abaixo do campo de senha */}
               <div className="flex justify-end mt-1.5">
-                <a
-                  href="#"
-                  className="text-xs text-[var(--accent)] hover:underline"
-                >
+                <button type="button" onClick={() => setLoginNotice("A recuperação de senha ainda não está conectada neste protótipo.")} className="text-xs text-[var(--accent)] hover:underline">
                   Esqueceu sua senha?
-                </a>
+                </button>
               </div>
             </div>
 
@@ -277,11 +278,13 @@ export default function LoginPage({ onNavigate, theme, onToggleTheme }: Props) {
             </button>
           </form>
 
+          {loginNotice && <p role="status" className="mt-4 w-full rounded-lg border px-3 py-2 text-left text-xs" style={{ background: "var(--secondary)", borderColor: "var(--border)", color: "var(--muted-foreground)" }}>{loginNotice}</p>}
+
           <p className="text-center text-xs text-[var(--muted-foreground)] mt-8">
-            Acesso apenas para funcionários cadastrados.{" "}
-            <a href="#" className="text-[var(--accent)] hover:underline">
+            Ambiente demonstrativo sem autenticação no servidor.{" "}
+            <button type="button" onClick={() => setLoginNotice("Solicitações de acesso ainda não são recebidas pelo protótipo. Use um perfil demonstrativo para navegar.")} className="text-[var(--accent)] hover:underline">
               Solicitar acesso
-            </a>
+            </button>
           </p>
         </div>
       </div>

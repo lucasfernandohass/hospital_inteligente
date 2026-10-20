@@ -9,14 +9,22 @@ export type Screen = "login" | "doutor" | "enfermeira" | "recepcionista"
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("login")
-  const [theme, setTheme] = useState<Theme>(() =>
-    localStorage.getItem("inteliHosp-theme") === "dark" ? "dark" : "light",
-  )
+  const [theme, setTheme] = useState<Theme>(() => {
+    try {
+      return localStorage.getItem("inteliHosp-theme") === "dark" ? "dark" : "light"
+    } catch {
+      return "light"
+    }
+  })
   const [animKey, setAnimKey] = useState(0)
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
-    localStorage.setItem("inteliHosp-theme", theme)
+    try {
+      localStorage.setItem("inteliHosp-theme", theme)
+    } catch {
+      // O tema escolhido continua valendo durante esta sessão.
+    }
   }, [theme])
 
   const navigate = (next: Screen) => {

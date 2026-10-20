@@ -1,7 +1,22 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import type { Screen } from "../App"
 import DashboardSidebar from "./DashboardSidebar"
 import ThemeToggle, { type Theme } from "./ThemeToggle"
+import VitalMonitoring from "./VitalMonitoring"
+import MonitoringAlertsPanel from "./MonitoringAlertsPanel"
+import ActivityLog from "./ActivityLog"
+import AlertNotifications from "./AlertNotifications"
+import type { MonitoringAlert } from "./VitalMonitoring"
+import { logActivity } from "./activityStore"
+import { CLINICAL_ALERT_ACK_STORAGE_KEY, clinicalAlertRecords, readLegacyClinicalAlertAcknowledgements } from "./clinicalAlertStore"
+import { CLINICAL_EVOLUTION_STORAGE_KEY, mergeClinicalEvolutions, readLegacyClinicalEvolutions, type ClinicalEvolutionMap } from "./clinicalEvolutionStore"
+import { PRESCRIPTION_STORAGE_KEY, type SharedPrescription } from "./prescriptionStore"
+import { MEDICATION_ADMINISTRATION_STORAGE_KEY } from "./medicationAdministrationStore"
+import { EXAM_STORAGE_KEY, type ExamType, type SharedExamRequest } from "./examStore"
+import { APPOINTMENT_STORAGE_KEY, DOCTOR_DEMO_ID, formatLongLocalDate, includeDoctorDemoAppointments, initialReceptionAppointments, localDateInputValue, type ReceptionAppointment } from "./appointmentStore"
+import { HOSPITALIZATION_STORAGE_KEY, type Hospitalization } from "./hospitalizationStore"
+import useLocalStorageState from "./useLocalStorageState"
+import { BED_STORAGE_KEY, initialRegisteredBeds, initialRegisteredPatients, normalizeRegisteredBeds, PATIENT_STORAGE_KEY, type RegisteredBed, type RegisteredPatient } from "./patientStore"
 
 interface Props {
   onNavigate: (screen: Screen) => void
@@ -9,11 +24,11 @@ interface Props {
   onToggleTheme: () => void
 }
 
-type Tab = "overview" | "atendimento" | "prescricao" | "exames" | "agenda" | "internacao" | "alertas"
+type Tab = "overview" | "atendimento" | "monitoramento" | "prescricao" | "exames" | "agenda" | "internacao" | "atividades" | "alertas"
 
 type IconName = "users" | "clipboard" | "flask" | "bed" | "bell" | "alert" | "activity" | "image" | "ecg" | "chevron" | "arrow" | "search" | "check" | "x"
 
-const pacientes = [
+const pacientesBase = [
   {
     id: "PAC-001",
     nome: "João da Silva",
@@ -22,6 +37,8 @@ const pacientes = [
     idade: 47,
     sexo: "M",
     telefone: "(11) 98765-4321",
+    leito: "12A",
+    setor: "Cardiologia",
     condicao: "Hipertensão",
     status: "estável",
     avatar: "JS",
@@ -38,6 +55,8 @@ const pacientes = [
     idade: 62,
     sexo: "F",
     telefone: "(11) 91234-5678",
+    leito: "08B",
+    setor: "Endocrinologia",
     condicao: "Diabetes Tipo 2",
     status: "atenção",
     avatar: "MF",
@@ -54,6 +73,8 @@ const pacientes = [
     idade: 35,
     sexo: "M",
     telefone: "(11) 92345-6789",
+    leito: "14B",
+    setor: "Pneumologia",
     condicao: "Pneumonia",
     status: "crítico",
     avatar: "CA",
@@ -70,6 +91,8 @@ const pacientes = [
     idade: 29,
     sexo: "F",
     telefone: "(11) 93456-7890",
+    leito: "05A",
+    setor: "Clínica Médica",
     condicao: "Enxaqueca",
     status: "estável",
     avatar: "AB",
@@ -86,6 +109,8 @@ const pacientes = [
     idade: 54,
     sexo: "M",
     telefone: "(11) 94567-8901",
+    leito: "22A",
+    setor: "Cardiologia",
     condicao: "Insuf. Cardíaca",
     status: "atenção",
     avatar: "RL",
@@ -318,51 +343,6 @@ const exames = [
   },
 ]
 
-const agendaMedica = [
-  {
-    hora: "08:00",
-    paciente: "Ana Beatriz",
-    tipo: "Retorno",
-    local: "Consultório 12",
-    concluido: true,
-  },
-  {
-    hora: "09:20",
-    paciente: "João da Silva",
-    tipo: "Consulta",
-    local: "Consultório 12",
-    concluido: true,
-  },
-  {
-    hora: "10:45",
-    paciente: "Maria Fernanda",
-    tipo: "Exames",
-    local: "Consultório 12",
-    concluido: true,
-  },
-  {
-    hora: "13:00",
-    paciente: "Luiz Henrique",
-    tipo: "1ª Consulta",
-    local: "Consultório 12",
-    concluido: false,
-  },
-  {
-    hora: "14:30",
-    paciente: "Carlos Alberto",
-    tipo: "Revisão",
-    local: "Consultório 12",
-    concluido: false,
-  },
-  {
-    hora: "16:00",
-    paciente: "Patrícia Rocha",
-    tipo: "Retorno",
-    local: "Consultório 12",
-    concluido: false,
-  },
-]
-
 const internacoes = [
   {
     id: "INT-2024-018",
@@ -521,61 +501,186 @@ export default function DoctorDashboard({
   theme,
   onToggleTheme,
 }: Props) {
+  const [registeredPatients] = useLocalStorageState<RegisteredPatient[]>(PATIENT_STORAGE_KEY, initialRegisteredPatients)
+  const [registeredBeds, setRegisteredBeds] = useLocalStorageState<RegisteredBed[]>(BED_STORAGE_KEY, initialRegisteredBeds)
+  useEffect(() => setRegisteredBeds((current) => normalizeRegisteredBeds(current)), [setRegisteredBeds])
+  const [hospitalizations, setHospitalizations] = useLocalStorageState<Hospitalization[]>(HOSPITALIZATION_STORAGE_KEY, [])
+  const [receptionAppointments, setReceptionAppointments] = useLocalStorageState<ReceptionAppointment[]>(APPOINTMENT_STORAGE_KEY, initialReceptionAppointments)
+  useEffect(() => setReceptionAppointments((current) => includeDoctorDemoAppointments(current)), [setReceptionAppointments])
+  const pacientes = useMemo(() => {
+    const knownIds = new Set(pacientesBase.map((patient) => patient.id))
+    const synchronizedBase = pacientesBase.map((patient) => {
+      const registered = registeredPatients.find((item) => item.id === patient.id)
+      const occupiedBed = registeredBeds.find((bed) => bed.status === "Ocupado" && bed.pacienteId === patient.id)
+      const admission = hospitalizations.find((item) => item.pacienteId === patient.id && item.status === "Ativa")
+      return {
+        ...patient,
+        nome: registered?.nome ?? patient.nome,
+        cpf: registered?.cpf ?? patient.cpf,
+        dataNasc: registered?.dataNasc ?? patient.dataNasc,
+        sexo: registered?.sexo ?? patient.sexo,
+        telefone: registered?.telefone ?? patient.telefone,
+        convenio: registered?.convenio ?? patient.convenio,
+        leito: occupiedBed?.numero ?? "—",
+        setor: occupiedBed?.setor ?? occupiedBed?.tipo ?? patient.setor,
+        condicao: admission?.motivo ?? patient.condicao,
+      }
+    })
+    const additions = registeredPatients
+      .filter((patient) => !knownIds.has(patient.id))
+      .map((patient) => {
+        const parts = patient.dataNasc.split("/").map(Number)
+        const birthDate = new Date(parts[2] ?? 2000, (parts[1] ?? 1) - 1, parts[0] ?? 1)
+        const today = new Date()
+        const idade = Math.max(0, today.getFullYear() - birthDate.getFullYear() - (today < new Date(today.getFullYear(), birthDate.getMonth(), birthDate.getDate()) ? 1 : 0))
+        const occupiedBed = registeredBeds.find((bed) => bed.status === "Ocupado" && bed.pacienteId === patient.id)
+        const admission = hospitalizations.find((item) => item.pacienteId === patient.id && item.status === "Ativa")
+        return {
+          id: patient.id,
+          nome: patient.nome,
+          cpf: patient.cpf,
+          dataNasc: patient.dataNasc,
+          idade,
+          sexo: patient.sexo,
+          telefone: patient.telefone,
+          leito: occupiedBed?.numero ?? "—",
+          setor: occupiedBed?.setor ?? occupiedBed?.tipo ?? "Sem internação",
+          condicao: admission?.motivo ?? "Aguardando avaliação",
+          status: "estável",
+          avatar: patient.nome.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase(),
+          ultimo: "Cadastro recente",
+          risco: "low",
+          convenio: patient.convenio,
+          tipoSanguineo: "Não informado",
+        }
+      })
+    return [...synchronizedBase, ...additions]
+  }, [hospitalizations, registeredBeds, registeredPatients])
   const [activeTab, setActiveTab] = useState<Tab>("overview")
   const [selectedPaciente, setSelectedPaciente] =
     useState<typeof pacientes[0] | null>(null)
+  useEffect(() => {
+    setSelectedPaciente((current) => current ? pacientes.find((patient) => patient.id === current.id) ?? null : null)
+  }, [pacientes])
   const [expandedPrescricao, setExpandedPrescricao] = useState<string | null>(
     null,
   )
-  const [alertasVistos, setAlertasVistos] = useState<string[]>([])
+  const [prescricoesLocais, setPrescricoesLocais] = useLocalStorageState<SharedPrescription[]>(PRESCRIPTION_STORAGE_KEY, [])
+  const [medicacoesAdministradas] = useLocalStorageState<string[]>(MEDICATION_ADMINISTRATION_STORAGE_KEY, [])
+  const [evolucoesClinicas, setEvolucoesClinicas] = useLocalStorageState<ClinicalEvolutionMap>(CLINICAL_EVOLUTION_STORAGE_KEY, () => readLegacyClinicalEvolutions(registrosClinicos))
+  useEffect(() => setEvolucoesClinicas((current) => mergeClinicalEvolutions(current, registrosClinicos)), [setEvolucoesClinicas])
+  const [showEvolutionForm, setShowEvolutionForm] = useState(false)
+  const [evolutionDraft, setEvolutionDraft] = useState("")
+  const [showPrescriptionForm, setShowPrescriptionForm] = useState(false)
+  const [examesLocais, setExamesLocais] = useLocalStorageState<SharedExamRequest[]>(EXAM_STORAGE_KEY, [])
+  const [showExamForm, setShowExamForm] = useState(false)
+  const [examForm, setExamForm] = useState({ pacienteId: pacientes[0]?.id ?? "", nome: "", tipo: "ExameLaboratorial" as ExamType, data: localDateInputValue(), hora: "" })
+  const [resultExamId, setResultExamId] = useState<string | null>(null)
+  const [examResultDraft, setExamResultDraft] = useState("")
+  const [prescriptionForm, setPrescriptionForm] = useState({
+    pacienteId: pacientes[0]?.id ?? "",
+    medicamento: "",
+    dosagem: "",
+    via: "Oral",
+    horario: "08:00",
+    frequencia: "1x ao dia",
+    duracao: "7 dias",
+    quantidade: "7",
+  })
+  const [alertasReconhecidos, setAlertasReconhecidos] = useLocalStorageState<string[]>(CLINICAL_ALERT_ACK_STORAGE_KEY, readLegacyClinicalAlertAcknowledgements)
+  const [monitoringAlerts, setMonitoringAlerts] = useLocalStorageState<MonitoringAlert[]>("inteliHosp-medico-monitoramento-alertas", [])
+  const [monitoringAcknowledged, setMonitoringAcknowledged] = useLocalStorageState<string[]>("inteliHosp-monitoramento-reconhecidos", [])
+  const monitoringPendingCount = monitoringAlerts.filter((alert) => !monitoringAcknowledged.includes(alert.key)).length
   const [patientSearch, setPatientSearch] = useState("")
+  const [patientStatusFilter, setPatientStatusFilter] = useState("todos")
+  const [patientRiskFilter, setPatientRiskFilter] = useState("todos")
+  const [patientSectorFilter, setPatientSectorFilter] = useState("todos")
+  const [patientBedFilter, setPatientBedFilter] = useState("todos")
+  const [rescheduleAppointmentId, setRescheduleAppointmentId] = useState<string | null>(null)
+  const [rescheduleForm, setRescheduleForm] = useState({ data: localDateInputValue(), hora: "09:00" })
+  const [rescheduleError, setRescheduleError] = useState("")
+  const [altaEmConfirmacaoId, setAltaEmConfirmacaoId] = useState<string | null>(null)
 
-  const alertas = useMemo(
-    () => [
-      {
-        id: "ALT-001",
-        pacienteId: "PAC-003",
-        severity: "high" as const,
-        titulo: "Saturação de oxigênio abaixo do limite",
-        detalhe: "SpO₂ 88% — Pneumonia severa",
-        horario: "Agora",
-        local: "Leito 14B",
-        valor: "88%",
-        label: "SpO₂",
-      },
-      {
-        id: "ALT-002",
-        pacienteId: "PAC-002",
-        severity: "medium" as const,
-        titulo: "Glicemia acima do limite",
-        detalhe: "Glicemia de jejum 280 mg/dL",
-        horario: "Hoje, 10:45",
-        local: "Ambulatório",
-        valor: "280",
-        label: "mg/dL",
-      },
-      {
-        id: "ALT-003",
-        pacienteId: "PAC-005",
-        severity: "medium" as const,
-        titulo: "Pressão arterial elevada",
-        detalhe: "PA 165/105 mmHg",
-        horario: "Hoje, 07:30",
-        local: "Leito 22A",
-        valor: "165/105",
-        label: "mmHg",
-      },
-    ],
-    [],
-  )
+  const getPatientRisk = (patient: typeof pacientes[number]) => {
+    const alerts = monitoringAlerts.filter((alert) => alert.patientId === patient.id)
+    if (alerts.some((alert) => alert.severity === "Crítico")) return "high"
+    if (alerts.some((alert) => alert.severity === "Moderado")) return patient.risco === "high" ? "high" : "medium"
+    if (alerts.some((alert) => alert.severity === "Informativo")) return patient.risco === "low" ? "medium" : patient.risco
+    return patient.risco
+  }
+  const getPatientStatus = (patient: typeof pacientes[number]) => {
+    const risk = getPatientRisk(patient)
+    if (risk === "high") return "crítico"
+    if (risk === "medium") return "atenção"
+    return patient.status
+  }
 
-  const alertasPendentes = alertas.filter((a) => !alertasVistos.includes(a.id))
+  const alertas = clinicalAlertRecords
+
+  const alertasPendentes = alertas.filter((a) => !alertasReconhecidos.includes(a.id))
   const maxBP = Math.max(...vitalsData.map((d) => d.bp))
-  const filteredPatients = pacientes.filter((p) =>
-    `${p.nome} ${p.id} ${p.condicao}`
-      .toLowerCase()
-      .includes(patientSearch.toLowerCase()),
-  )
+  const patientSectors = [...new Set(pacientes.map((patient) => patient.setor))]
+  const patientBeds = [...new Set(pacientes.map((patient) => patient.leito).filter((bed) => bed !== "—"))]
+  const todasPrescricoes = [
+    ...prescricoes,
+    ...prescricoesLocais.map((prescription) => ({
+      id: prescription.id,
+      pacienteId: prescription.pacienteId,
+      data: prescription.data,
+      medico: prescription.medico,
+      itens: [prescription.item],
+    })),
+  ]
+  const todosExames = [...exames, ...examesLocais]
+  const selectedLatestVitals = selectedPaciente
+    ? evolucoesClinicas[selectedPaciente.id]?.find((entry) => entry.fc !== undefined || entry.temp !== undefined || entry.spo2 !== undefined || entry.pressao !== undefined) ?? registrosClinicos[selectedPaciente.id]?.[0]
+    : undefined
+  const agendaExibida = receptionAppointments
+      .filter((appointment) => appointment.medicoId === DOCTOR_DEMO_ID)
+      .sort((a, b) => a.data.localeCompare(b.data) || a.hora.localeCompare(b.hora))
+      .map((appointment) => {
+        const status = appointment.status ?? "Agendada"
+        return {
+        hora: appointment.hora,
+        paciente: appointment.paciente,
+        pacienteId: appointment.pacienteId ?? pacientes.find((patient) => patient.nome === appointment.paciente)?.id ?? "",
+        tipo: "Consulta agendada",
+        local: "Consultório 12",
+        status,
+        concluido: status === "Concluída",
+        data: appointment.data,
+        id: appointment.id,
+        key: appointment.id,
+      }})
+  const consultasHoje = agendaExibida.filter((appointment) => appointment.data === localDateInputValue())
+  const consultasPendentesHoje = consultasHoje.filter((appointment) => appointment.status !== "Concluída").length
+  const internacoesExibidas = [
+    ...internacoes
+      .filter((admission) => registeredBeds.some((bed) => bed.status === "Ocupado" && bed.pacienteId === admission.pacienteId && bed.numero === admission.leito))
+      .map((admission) => ({ ...admission, key: admission.id })),
+    ...hospitalizations
+      .filter((admission) => admission.status === "Ativa")
+      .map((admission) => ({
+        id: admission.id,
+        pacienteId: admission.pacienteId,
+        leito: admission.leito,
+        ala: admission.setor,
+        motivo: admission.motivo,
+        entrada: admission.dataEntrada,
+        altaPrevista: admission.dataAltaPrevista,
+        key: admission.id,
+      })),
+  ]
+  const filteredPatients = useMemo(() => pacientes.filter((patient) =>
+    `${patient.nome} ${patient.id} ${patient.condicao}`.toLowerCase().includes(patientSearch.toLowerCase()) &&
+    (patientStatusFilter === "todos" || getPatientStatus(patient) === patientStatusFilter) &&
+    (patientRiskFilter === "todos" || getPatientRisk(patient) === patientRiskFilter) &&
+    (patientSectorFilter === "todos" || patient.setor === patientSectorFilter) &&
+    (patientBedFilter === "todos" || patient.leito === patientBedFilter),
+  ), [pacientes, patientSearch, patientStatusFilter, patientRiskFilter, patientSectorFilter, patientBedFilter, monitoringAlerts])
+  useEffect(() => {
+    setSelectedPaciente((current) => current && !filteredPatients.some((patient) => patient.id === current.id) ? null : current)
+  }, [filteredPatients])
 
   const goToPatient = (id: string) => {
     const patient = pacientes.find((p) => p.id === id)
@@ -585,22 +690,148 @@ export default function DoctorDashboard({
     }
   }
 
-  const markAlertSeen = (id: string) => {
-    setAlertasVistos((current) =>
+  const markAlertRecognized = (id: string) => {
+    logActivity("Médico", "Alerta reconhecido", "Alerta", id)
+    setAlertasReconhecidos((current) =>
       current.includes(id) ? current : [...current, id],
     )
   }
 
-  const markAllAlertsSeen = () => setAlertasVistos(alertas.map((a) => a.id))
+  const markAllAlertsRecognized = () => {
+    if (alertasPendentes.length) logActivity("Médico", "Alertas reconhecidos", "Central de alertas", `${alertasPendentes.length} alertas`)
+    setAlertasReconhecidos((current) => [...new Set([...current, ...alertas.map((alert) => alert.id)])])
+  }
+
+  const handleSalvarPrescricao = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const paciente = pacientes.find((patient) => patient.id === prescriptionForm.pacienteId)
+    const quantidade = Number(prescriptionForm.quantidade)
+    if (!paciente || !prescriptionForm.medicamento.trim() || !prescriptionForm.dosagem.trim() || !Number.isFinite(quantidade) || quantidade < 1) return
+    const id = String(Date.now())
+    const prescription: SharedPrescription = {
+      id: "RX-LOCAL-" + id,
+      pacienteId: paciente.id,
+      data: new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).format(new Date()),
+      medico: "Dr. Pedro Campos",
+      item: {
+        id: "IP-LOCAL-" + id,
+        medicamento: prescriptionForm.medicamento.trim(),
+        dosagem: prescriptionForm.dosagem.trim(),
+        via: prescriptionForm.via,
+        horario: prescriptionForm.horario,
+        frequencia: prescriptionForm.frequencia.trim(),
+        duracao: prescriptionForm.duracao.trim(),
+        quantidade,
+      },
+    }
+    setPrescricoesLocais((current) => [prescription, ...current])
+    logActivity("Médico", "Prescrição demonstrativa criada", paciente.id, `${prescription.item.medicamento} · ${prescription.item.dosagem}`)
+    setPrescriptionForm({ pacienteId: paciente.id, medicamento: "", dosagem: "", via: "Oral", horario: "08:00", frequencia: "1x ao dia", duracao: "7 dias", quantidade: "7" })
+    setShowPrescriptionForm(false)
+  }
+
+  const handleReagendarConsulta = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!rescheduleAppointmentId || !rescheduleForm.data || !rescheduleForm.hora) return
+    const appointment = receptionAppointments.find((item) => item.id === rescheduleAppointmentId)
+    if (!appointment || appointment.status === "Concluída" || appointment.status === "Em atendimento") return
+    const conflict = receptionAppointments.some((item) => item.id !== rescheduleAppointmentId && item.medicoId === appointment.medicoId && item.data === rescheduleForm.data && item.hora === rescheduleForm.hora)
+    if (conflict) {
+      setRescheduleError("Este horário já está ocupado na agenda do médico.")
+      return
+    }
+    setReceptionAppointments((current) => current.map((item) => item.id === rescheduleAppointmentId ? { ...item, ...rescheduleForm } : item))
+    logActivity("Médico", "Consulta demonstrativa reagendada", appointment.pacienteId ?? appointment.paciente, `${rescheduleForm.data} · ${rescheduleForm.hora}`)
+    setRescheduleAppointmentId(null)
+    setRescheduleError("")
+  }
+
+  const handleIniciarConsulta = (appointmentId: string) => {
+    const appointment = receptionAppointments.find((item) => item.id === appointmentId)
+    if (!appointment || appointment.status === "Concluída") return
+    setReceptionAppointments((current) => current.map((item) => item.id === appointmentId ? { ...item, status: "Em atendimento" } : item))
+    logActivity("Médico", "Atendimento iniciado", appointment.pacienteId ?? appointment.paciente, `${appointment.id} · ${appointment.hora}`)
+    if (appointment.pacienteId) goToPatient(appointment.pacienteId)
+  }
+
+  const handleConcluirConsulta = (appointmentId: string) => {
+    const appointment = receptionAppointments.find((item) => item.id === appointmentId)
+    if (!appointment || appointment.status !== "Em atendimento") return
+    setReceptionAppointments((current) => current.map((item) => item.id === appointmentId ? { ...item, status: "Concluída" } : item))
+    logActivity("Médico", "Atendimento concluído", appointment.pacienteId ?? appointment.paciente, `${appointment.id} · ${appointment.hora}`)
+  }
+
+  const handleDarAlta = (patientId: string, admissionId: string, bedNumber: string) => {
+    const bed = registeredBeds.find((item) => item.status === "Ocupado" && item.pacienteId === patientId && item.numero === bedNumber)
+    if (!bed) return
+    const dischargeDate = new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(new Date())
+    setRegisteredBeds((current) => current.map((item) => item.id === bed.id ? { ...item, status: "Higienização", pacienteId: undefined } : item))
+    setHospitalizations((current) => current.map((item) => item.id === admissionId && item.status === "Ativa" ? { ...item, status: "Alta", dataAlta: dischargeDate } : item))
+    logActivity("Médico", "Alta demonstrativa registrada", patientId, `Leito ${bedNumber} · ${dischargeDate}`)
+    setAltaEmConfirmacaoId(null)
+  }
+
+  const handleSolicitarExame = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const patient = pacientes.find((item) => item.id === examForm.pacienteId)
+    if (!patient || !examForm.nome.trim() || !examForm.data) return
+    const request: SharedExamRequest = {
+      id: "EX-LOCAL-" + Date.now(),
+      pacienteId: patient.id,
+      tipo: examForm.tipo,
+      nome: examForm.nome.trim(),
+      data: new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(new Date(examForm.data + "T12:00:00")),
+      status: "agendado",
+      resultado: null,
+      solicitante: "Dr. Pedro Campos",
+      hora: examForm.hora || "A definir",
+    }
+    setExamesLocais((current) => [request, ...current])
+    logActivity("Médico", "Solicitação demonstrativa criada", patient.id, `${request.nome} · ${request.id}`)
+    setExamForm({ pacienteId: patient.id, nome: "", tipo: "ExameLaboratorial", data: localDateInputValue(), hora: "" })
+    setShowExamForm(false)
+  }
+
+  const handleSalvarResultadoExame = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const exam = examesLocais.find((item) => item.id === resultExamId)
+    const result = examResultDraft.trim()
+    if (!exam || !result) return
+    setExamesLocais((current) => current.map((item) => item.id === exam.id ? { ...item, status: "resultado", resultado: result } : item))
+    logActivity("Médico", "Resultado de exame registrado", exam.pacienteId, `${exam.nome} · ${exam.id}`)
+    setResultExamId(null)
+    setExamResultDraft("")
+  }
+
+  const handleSalvarEvolucaoClinica = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const description = evolutionDraft.trim()
+    if (!selectedPaciente || !description) return
+    const entry = {
+      data: new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date()),
+      descricao: description,
+      perfil: "Médico" as const,
+      profissional: "Dr. Pedro Campos",
+    }
+    setEvolucoesClinicas((current) => ({
+      ...current,
+      [selectedPaciente.id]: [entry, ...(current[selectedPaciente.id] ?? [])],
+    }))
+    logActivity("Médico", "Evolução clínica registrada", selectedPaciente.id, description.slice(0, 120))
+    setEvolutionDraft("")
+    setShowEvolutionForm(false)
+  }
 
   // Alerta é o último item da navbar
   const tabs: { key: Tab; label: string }[] = [
     { key: "overview", label: "Visão Geral" },
     { key: "atendimento", label: "Pacientes" },
+    { key: "monitoramento", label: "Monitoramento" },
     { key: "prescricao", label: "Prescrições" },
     { key: "exames", label: "Exames" },
     { key: "agenda", label: "Agenda Médica" },
     { key: "internacao", label: "Internações" },
+    { key: "atividades", label: "Registro de Atividades" },
     { key: "alertas", label: "Alertas" },
   ]
 
@@ -613,7 +844,7 @@ export default function DoctorDashboard({
     subtitle: string
     action?: React.ReactNode
   }) => (
-    <div className="flex items-start justify-between gap-4 mb-6">
+    <div className="flex flex-col items-stretch justify-between gap-3 mb-6 sm:flex-row sm:items-start sm:gap-4">
       <div>
         <h1
           className="text-2xl md:text-3xl font-semibold tracking-tight"
@@ -639,8 +870,8 @@ export default function DoctorDashboard({
     p: typeof pacientes[0]
     compact?: boolean
   }) => {
-    const c = riskColor[(p.risco as keyof typeof riskColor)]
-    const rc = registrosClinicos[p.id]?.[0]
+    const c = riskColor[getPatientRisk(p) as keyof typeof riskColor]
+    const rc = evolucoesClinicas[p.id]?.[0] ?? registrosClinicos[p.id]?.[0]
 
     return (
       <button
@@ -734,10 +965,10 @@ export default function DoctorDashboard({
               <div
                 className="text-xs font-semibold mt-0.5"
                 style={{
-                  color: rc.spo2 < 94 ? "#C0392B" : "var(--foreground)",
+                  color: rc.spo2 !== undefined && rc.spo2 < 94 ? "#C0392B" : "var(--foreground)",
                 }}
               >
-                {rc.spo2}%
+                {rc.spo2 !== undefined ? `${rc.spo2}%` : "—"}
               </div>
             </div>
           </div>
@@ -763,6 +994,7 @@ export default function DoctorDashboard({
 
   return (
     <div className="min-h-screen" style={{ background: "var(--background)" }}>
+      <AlertNotifications alerts={monitoringAlerts} profile="Médico" onOpenAlerts={() => setActiveTab("alertas")} />
       <DashboardSidebar
         role="Médico"
         initials="RO"
@@ -772,7 +1004,7 @@ export default function DoctorDashboard({
         activeTab={activeTab}
         onSelect={(key) => setActiveTab(key as Tab)}
         onLogout={() => onNavigate("login")}
-        alertCount={alertasPendentes.length}
+        alertCount={alertasPendentes.length + monitoringPendingCount}
         theme={theme}
         onToggleTheme={onToggleTheme}
       />
@@ -807,36 +1039,55 @@ export default function DoctorDashboard({
         </header>
 
         <main className="dashboard-main mx-auto w-full min-w-0 max-w-7xl flex-1 px-4 pb-24 pt-20 sm:px-6 xl:p-6">
+          <div className={activeTab === "monitoramento" ? "block" : "hidden"} aria-hidden={activeTab !== "monitoramento"}>
+            <VitalMonitoring
+              profile="Médico"
+              storageKey="inteliHosp-monitoramento"
+              onAlertsChange={setMonitoringAlerts}
+              acknowledgedAlerts={monitoringAcknowledged}
+              setAcknowledgedAlerts={setMonitoringAcknowledged}
+              patients={pacientes.filter((patient) => registeredBeds.some((bed) => bed.status === "Ocupado" && bed.pacienteId === patient.id)).map((patient) => {
+                const occupiedBed = registeredBeds.find((bed) => bed.status === "Ocupado" && bed.pacienteId === patient.id)
+                return {
+                  id: patient.id,
+                  name: patient.nome,
+                  bed: occupiedBed?.numero ?? patient.leito,
+                  sector: occupiedBed?.setor ?? occupiedBed?.tipo ?? patient.setor,
+                  condition: patient.condicao,
+                }
+              })}
+            />
+          </div>
           {activeTab === "overview" && (
             <div className="fade-in">
               <PageTitle
                 title="Bom dia, Dr. Pedro"
-                subtitle="Segunda-feira, 15 de setembro de 2026"
+                subtitle={formatLongLocalDate()}
               />
 
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                 {[
                   {
                     label: "Atendimentos hoje",
-                    value: "06",
+                    value: String(consultasHoje.length).padStart(2, "0"),
                     icon: "users" as IconName,
-                    detail: "2 restantes",
+                    detail: `${consultasPendentesHoje} pendente${consultasPendentesHoje === 1 ? "" : "s"}`,
                   },
                   {
                     label: "Prescrições emitidas",
-                    value: "03",
+                    value: String(todasPrescricoes.length).padStart(2, "0"),
                     icon: "clipboard" as IconName,
                     detail: "Hoje",
                   },
                   {
                     label: "Exames pendentes",
-                    value: "04",
+                    value: String(todosExames.filter((exam) => exam.status !== "resultado").length).padStart(2, "0"),
                     icon: "flask" as IconName,
-                    detail: "2 resultados",
+                    detail: "Aguardando resultado",
                   },
                   {
                     label: "Pacientes internados",
-                    value: "02",
+                    value: String(internacoesExibidas.length).padStart(2, "0"),
                     icon: "bed" as IconName,
                     detail: "Ativos",
                   },
@@ -1013,7 +1264,7 @@ export default function DoctorDashboard({
                               className="text-[9px] mt-1"
                               style={{ color: c.text }}
                             >
-                              {a.horario} · {a.local}
+                              {a.data} · {a.horario} · {a.local}
                             </div>
                           </div>
                         </button>
@@ -1074,7 +1325,7 @@ export default function DoctorDashboard({
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {pacientes
-                    .filter((p) => p.risco !== "low")
+                    .filter((p) => getPatientRisk(p) !== "low")
                     .map((p) => (
                       <PatientCard key={p.id} p={p} />
                     ))}
@@ -1109,6 +1360,28 @@ export default function DoctorDashboard({
                         color: "var(--foreground)",
                       }}
                     />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <select value={patientSectorFilter} onChange={(event) => setPatientSectorFilter(event.target.value)} aria-label="Filtrar pacientes por setor" className="h-10 min-w-0 rounded-lg border px-2 text-xs" style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--foreground)" }}>
+                      <option value="todos">Todos os setores</option>
+                      {patientSectors.map((sector) => <option key={sector} value={sector}>{sector}</option>)}
+                    </select>
+                    <select value={patientBedFilter} onChange={(event) => setPatientBedFilter(event.target.value)} aria-label="Filtrar pacientes por leito" className="h-10 min-w-0 rounded-lg border px-2 text-xs" style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--foreground)" }}>
+                      <option value="todos">Todos os leitos</option>
+                      {patientBeds.map((bed) => <option key={bed} value={bed}>Leito {bed}</option>)}
+                    </select>
+                    <select value={patientRiskFilter} onChange={(event) => setPatientRiskFilter(event.target.value)} aria-label="Filtrar pacientes por criticidade" className="h-10 min-w-0 rounded-lg border px-2 text-xs" style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--foreground)" }}>
+                      <option value="todos">Todas as criticidades</option>
+                      <option value="low">Baixa</option>
+                      <option value="medium">Moderada</option>
+                      <option value="high">Crítica</option>
+                    </select>
+                    <select value={patientStatusFilter} onChange={(event) => setPatientStatusFilter(event.target.value)} aria-label="Filtrar pacientes por situação clínica" className="h-10 min-w-0 rounded-lg border px-2 text-xs" style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--foreground)" }}>
+                      <option value="todos">Todas as situações</option>
+                      <option value="estável">Estável</option>
+                      <option value="atenção">Atenção</option>
+                      <option value="crítico">Crítico</option>
+                    </select>
                   </div>
                   {filteredPatients.map((p) => (
                     <button
@@ -1170,11 +1443,12 @@ export default function DoctorDashboard({
                         className="w-2 h-2 rounded-full shrink-0"
                         style={{
                           background:
-                            riskColor[(p.risco as keyof typeof riskColor)].dot,
+                            riskColor[getPatientRisk(p) as keyof typeof riskColor].dot,
                         }}
                       />
                     </button>
                   ))}
+                  {filteredPatients.length === 0 && <p className="rounded-xl border p-4 text-center text-xs" style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--muted-foreground)" }}>Nenhum paciente corresponde aos filtros.</p>}
                 </div>
 
                 <div className="lg:col-span-2">
@@ -1207,17 +1481,17 @@ export default function DoctorDashboard({
                                 style={{
                                   background:
                                     riskColor[
-                                      (selectedPaciente.risco as keyof typeof riskColor)
+                                      (getPatientRisk(selectedPaciente) as keyof typeof riskColor)
                                     ].bg,
                                   color:
                                     riskColor[
-                                      (selectedPaciente.risco as keyof typeof riskColor)
+                                      (getPatientRisk(selectedPaciente) as keyof typeof riskColor)
                                     ].text,
                                 }}
                               >
                                 {
                                   riskColor[
-                                    (selectedPaciente.risco as keyof typeof riskColor)
+                                    (getPatientRisk(selectedPaciente) as keyof typeof riskColor)
                                   ].label
                                 }
                               </span>
@@ -1237,31 +1511,27 @@ export default function DoctorDashboard({
                             {
                               label: "Pressão arterial",
                               value:
-                                registrosClinicos[selectedPaciente.id]?.[0]
-                                  ?.pressao ?? "—",
+                                selectedLatestVitals?.pressao ?? "—",
                               unit: "mmHg",
                             },
                             {
                               label: "Frequência cardíaca",
                               value: String(
-                                registrosClinicos[selectedPaciente.id]?.[0]
-                                  ?.fc ?? "—",
+                                selectedLatestVitals?.fc ?? "—",
                               ),
                               unit: "bpm",
                             },
                             {
                               label: "Temperatura",
                               value: String(
-                                registrosClinicos[selectedPaciente.id]?.[0]
-                                  ?.temp ?? "—",
+                                selectedLatestVitals?.temp ?? "—",
                               ),
                               unit: "°C",
                             },
                             {
                               label: "SpO₂",
                               value: String(
-                                registrosClinicos[selectedPaciente.id]?.[0]
-                                  ?.spo2 ?? "—",
+                                selectedLatestVitals?.spo2 ?? "—",
                               ),
                               unit: "%",
                             },
@@ -1356,14 +1626,27 @@ export default function DoctorDashboard({
                             </p>
                           </div>
                           <button
+                            type="button"
+                            onClick={() => setShowEvolutionForm((current) => !current)}
                             className="h-8 px-3 rounded-lg text-xs font-semibold text-white cursor-pointer"
                             style={{ background: "var(--primary)" }}
                           >
-                            Nova evolução
+                            {showEvolutionForm ? "Fechar" : "Nova evolução"}
                           </button>
                         </div>
+                        {showEvolutionForm && (
+                          <form onSubmit={handleSalvarEvolucaoClinica} className="mb-4 flex flex-col gap-3 rounded-xl border p-3" style={{ background: "var(--background)", borderColor: "var(--border)" }}>
+                            <label className="flex flex-col gap-1 text-[10px] font-semibold" style={{ color: "var(--muted-foreground)" }}>Anotação médica para {selectedPaciente.nome}
+                              <textarea required value={evolutionDraft} onChange={(event) => setEvolutionDraft(event.target.value)} rows={4} placeholder="Registre a avaliação, conduta ou observação clínica" className="min-h-24 rounded-lg border p-3 text-xs font-normal" style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--foreground)" }} />
+                            </label>
+                            <div className="flex flex-wrap justify-end gap-2">
+                              <button type="button" onClick={() => { setShowEvolutionForm(false); setEvolutionDraft("") }} className="min-h-9 rounded-lg px-3 text-xs font-semibold" style={{ background: "var(--secondary)", color: "var(--primary)" }}>Cancelar</button>
+                              <button type="submit" disabled={!evolutionDraft.trim()} className="min-h-9 rounded-lg px-3 text-xs font-semibold disabled:opacity-50" style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}>Salvar evolução</button>
+                            </div>
+                          </form>
+                        )}
                         <div className="flex flex-col gap-3">
-                          {(registrosClinicos[selectedPaciente.id] ?? []).map(
+                          {(evolucoesClinicas[selectedPaciente.id] ?? []).map(
                             (rc, i) => (
                               <div
                                 key={i}
@@ -1375,7 +1658,7 @@ export default function DoctorDashboard({
                                     className="text-xs font-semibold"
                                     style={{ color: "var(--foreground)" }}
                                   >
-                                    Atendimento clínico
+                                    {rc.perfil === "Médico" ? "Evolução médica" : rc.perfil === "Enfermagem" ? "Evolução de enfermagem" : "Atendimento clínico"}
                                   </span>
                                   <span
                                     className="text-[10px] font-mono"
@@ -1390,6 +1673,7 @@ export default function DoctorDashboard({
                                 >
                                   {rc.descricao}
                                 </p>
+                              {rc.profissional && <p className="mt-2 text-[10px]" style={{ color: "var(--muted-foreground)" }}>{rc.profissional}</p>}
                               </div>
                             ),
                           )}
@@ -1439,15 +1723,51 @@ export default function DoctorDashboard({
                 subtitle="Prescrições médicas e itens emitidos"
                 action={
                   <button
+                    type="button"
+                    onClick={() => setShowPrescriptionForm((current) => !current)}
                     className="h-9 px-4 rounded-lg text-xs font-semibold text-white cursor-pointer"
                     style={{ background: "var(--primary)" }}
                   >
-                    Nova prescrição
+                    {showPrescriptionForm ? "Fechar formulário" : "Nova prescrição"}
                   </button>
                 }
               />
+              {showPrescriptionForm && (
+                <form onSubmit={handleSalvarPrescricao} className="mb-5 grid grid-cols-1 gap-3 rounded-[var(--radius)] border p-4 sm:grid-cols-2 xl:grid-cols-4" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
+                  <label className="flex min-w-0 flex-col gap-1 text-[10px] font-medium sm:col-span-2" style={{ color: "var(--muted-foreground)" }}>Paciente
+                    <select required value={prescriptionForm.pacienteId} onChange={(event) => setPrescriptionForm({ ...prescriptionForm, pacienteId: event.target.value })} className="min-h-11 rounded-lg border px-3 text-sm" style={{ background: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }}>
+                      {pacientes.map((patient) => <option key={patient.id} value={patient.id}>{patient.nome} · {patient.id}</option>)}
+                    </select>
+                  </label>
+                  <label className="flex min-w-0 flex-col gap-1 text-[10px] font-medium sm:col-span-2" style={{ color: "var(--muted-foreground)" }}>Medicamento
+                    <input required value={prescriptionForm.medicamento} onChange={(event) => setPrescriptionForm({ ...prescriptionForm, medicamento: event.target.value })} placeholder="Nome do medicamento" className="min-h-11 rounded-lg border px-3 text-sm" style={{ background: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }} />
+                  </label>
+                  <label className="flex min-w-0 flex-col gap-1 text-[10px] font-medium" style={{ color: "var(--muted-foreground)" }}>Dosagem
+                    <input required value={prescriptionForm.dosagem} onChange={(event) => setPrescriptionForm({ ...prescriptionForm, dosagem: event.target.value })} placeholder="Ex.: 500 mg" className="min-h-11 rounded-lg border px-3 text-sm" style={{ background: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }} />
+                  </label>
+                  <label className="flex min-w-0 flex-col gap-1 text-[10px] font-medium" style={{ color: "var(--muted-foreground)" }}>Via
+                    <select value={prescriptionForm.via} onChange={(event) => setPrescriptionForm({ ...prescriptionForm, via: event.target.value })} className="min-h-11 rounded-lg border px-3 text-sm" style={{ background: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }}>
+                      <option>Oral</option><option>IV</option><option>IM</option><option>SC</option><option>Tópica</option>
+                    </select>
+                  </label>
+                  <label className="flex min-w-0 flex-col gap-1 text-[10px] font-medium" style={{ color: "var(--muted-foreground)" }}>Horário inicial
+                    <input required type="time" value={prescriptionForm.horario} onChange={(event) => setPrescriptionForm({ ...prescriptionForm, horario: event.target.value })} className="min-h-11 rounded-lg border px-3 text-sm" style={{ background: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }} />
+                  </label>
+                  <label className="flex min-w-0 flex-col gap-1 text-[10px] font-medium" style={{ color: "var(--muted-foreground)" }}>Frequência
+                    <input required value={prescriptionForm.frequencia} onChange={(event) => setPrescriptionForm({ ...prescriptionForm, frequencia: event.target.value })} placeholder="Ex.: 8/8h" className="min-h-11 rounded-lg border px-3 text-sm" style={{ background: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }} />
+                  </label>
+                  <label className="flex min-w-0 flex-col gap-1 text-[10px] font-medium" style={{ color: "var(--muted-foreground)" }}>Duração
+                    <input required value={prescriptionForm.duracao} onChange={(event) => setPrescriptionForm({ ...prescriptionForm, duracao: event.target.value })} placeholder="Ex.: 7 dias" className="min-h-11 rounded-lg border px-3 text-sm" style={{ background: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }} />
+                  </label>
+                  <label className="flex min-w-0 flex-col gap-1 text-[10px] font-medium" style={{ color: "var(--muted-foreground)" }}>Quantidade
+                    <input required type="number" min="1" value={prescriptionForm.quantidade} onChange={(event) => setPrescriptionForm({ ...prescriptionForm, quantidade: event.target.value })} className="min-h-11 rounded-lg border px-3 text-sm" style={{ background: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }} />
+                  </label>
+                  <button type="submit" className="min-h-11 self-end rounded-lg px-4 text-xs font-semibold" style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}>Salvar prescrição simulada</button>
+                  <p className="text-[10px] sm:col-span-2 xl:col-span-4" style={{ color: "var(--muted-foreground)" }}>Este formulário é demonstrativo; a prescrição fica neste navegador e não é uma ordem clínica real.</p>
+                </form>
+              )}
               <div className="flex flex-col gap-3">
-                {prescricoes.map((rx) => {
+                {todasPrescricoes.map((rx) => {
                   const pac = pacientes.find((p) => p.id === rx.pacienteId)
                   const open = expandedPrescricao === rx.id
                   return (
@@ -1511,7 +1831,7 @@ export default function DoctorDashboard({
                             className="overflow-x-auto rounded-lg"
                             style={{ border: "1px solid var(--border)" }}
                           >
-                            <table className="w-full min-w-[640px] text-xs">
+                            <table className="w-full min-w-[760px] text-xs">
                               <thead>
                                 <tr style={{ background: "var(--secondary)" }}>
                                   {[
@@ -1522,6 +1842,7 @@ export default function DoctorDashboard({
                                     "Frequência",
                                     "Duração",
                                     "Qtd",
+                                    "Administração",
                                   ].map((h) => (
                                     <th
                                       key={h}
@@ -1576,6 +1897,13 @@ export default function DoctorDashboard({
                                     >
                                       {item.quantidade}
                                     </td>
+                                    <td className="px-3 py-2.5">
+                                      {medicacoesAdministradas.includes(item.id) ? (
+                                        <span className="rounded-full px-2 py-1 text-[10px] font-semibold" style={{ background: "#E8F8F5", color: "#007F72" }}>Administrado</span>
+                                      ) : (
+                                        <span className="rounded-full px-2 py-1 text-[10px] font-semibold" style={{ background: "var(--secondary)", color: "var(--muted-foreground)" }}>Pendente</span>
+                                      )}
+                                    </td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -1597,15 +1925,42 @@ export default function DoctorDashboard({
                 subtitle="Exames laboratoriais, exames de imagem e ECG"
                 action={
                   <button
+                    type="button"
+                    onClick={() => setShowExamForm((current) => !current)}
                     className="h-9 px-4 rounded-lg text-xs font-semibold text-white cursor-pointer"
                     style={{ background: "var(--primary)" }}
                   >
-                    Solicitar exame
+                    {showExamForm ? "Fechar formulário" : "Solicitar exame"}
                   </button>
                 }
               />
+              {showExamForm && (
+                <form onSubmit={handleSolicitarExame} className="mb-5 grid grid-cols-1 gap-3 rounded-[var(--radius)] border p-4 sm:grid-cols-2 xl:grid-cols-5" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
+                  <label className="flex min-w-0 flex-col gap-1 text-[10px] font-medium sm:col-span-2" style={{ color: "var(--muted-foreground)" }}>Paciente
+                    <select required value={examForm.pacienteId} onChange={(event) => setExamForm({ ...examForm, pacienteId: event.target.value })} className="min-h-11 rounded-lg border px-3 text-sm" style={{ background: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }}>
+                      {pacientes.map((patient) => <option key={patient.id} value={patient.id}>{patient.nome} · {patient.id}</option>)}
+                    </select>
+                  </label>
+                  <label className="flex min-w-0 flex-col gap-1 text-[10px] font-medium sm:col-span-2 xl:col-span-5" style={{ color: "var(--muted-foreground)" }}>Exame solicitado
+                    <input required value={examForm.nome} onChange={(event) => setExamForm({ ...examForm, nome: event.target.value })} placeholder="Ex.: Hemograma completo" className="min-h-11 rounded-lg border px-3 text-sm" style={{ background: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }} />
+                  </label>
+                  <label className="flex min-w-0 flex-col gap-1 text-[10px] font-medium" style={{ color: "var(--muted-foreground)" }}>Categoria
+                    <select value={examForm.tipo} onChange={(event) => setExamForm({ ...examForm, tipo: event.target.value as ExamType })} className="min-h-11 rounded-lg border px-3 text-sm" style={{ background: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }}>
+                      <option value="ExameLaboratorial">Laboratorial</option><option value="ExameImagem">Imagem</option><option value="ECG">ECG</option>
+                    </select>
+                  </label>
+                  <label className="flex min-w-0 flex-col gap-1 text-[10px] font-medium" style={{ color: "var(--muted-foreground)" }}>Data prevista
+                    <input required type="date" value={examForm.data} onChange={(event) => setExamForm({ ...examForm, data: event.target.value })} className="min-h-11 rounded-lg border px-3 text-sm" style={{ background: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }} />
+                  </label>
+                  <label className="flex min-w-0 flex-col gap-1 text-[10px] font-medium" style={{ color: "var(--muted-foreground)" }}>Horário
+                    <input type="time" value={examForm.hora} onChange={(event) => setExamForm({ ...examForm, hora: event.target.value })} className="min-h-11 rounded-lg border px-3 text-sm" style={{ background: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }} />
+                  </label>
+                  <button type="submit" className="min-h-11 self-end rounded-lg px-4 text-xs font-semibold" style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}>Salvar solicitação</button>
+                  <p className="text-[10px] sm:col-span-2 xl:col-span-5" style={{ color: "var(--muted-foreground)" }}>Solicitação demonstrativa armazenada no navegador compartilhado entre os perfis.</p>
+                </form>
+              )}
               <div className="flex flex-col gap-3">
-                {exames.map((ex) => {
+                {todosExames.map((ex) => {
                   const pac = pacientes.find((p) => p.id === ex.pacienteId)
                   const icon: IconName =
                     ex.tipo === "ExameLaboratorial"
@@ -1664,7 +2019,7 @@ export default function DoctorDashboard({
                             >
                               {ex.status === "resultado"
                                 ? "Resultado disponível"
-                                : "Agendado"}
+                                : ex.status === "em andamento" ? "Em andamento" : "Agendado"}
                             </span>
                           </div>
                           <div
@@ -1713,6 +2068,19 @@ export default function DoctorDashboard({
                               {ex.resultado}
                             </div>
                           )}
+                          {examesLocais.some((localExam) => localExam.id === ex.id) && ex.status === "em andamento" && (
+                            resultExamId === ex.id ? (
+                              <form onSubmit={handleSalvarResultadoExame} className="mt-3 flex flex-col gap-2 sm:flex-row" aria-label={`Registrar resultado de ${ex.nome}`}>
+                                <textarea required value={examResultDraft} onChange={(event) => setExamResultDraft(event.target.value)} placeholder="Descreva o resultado do exame" rows={3} className="min-h-20 min-w-0 flex-1 rounded-lg border p-3 text-xs" style={{ background: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }} />
+                                <div className="flex gap-2 sm:flex-col">
+                                  <button type="submit" className="min-h-10 rounded-lg px-3 text-xs font-semibold" style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}>Salvar resultado</button>
+                                  <button type="button" onClick={() => { setResultExamId(null); setExamResultDraft("") }} className="min-h-10 rounded-lg px-3 text-xs font-semibold" style={{ background: "var(--secondary)", color: "var(--primary)" }}>Cancelar</button>
+                                </div>
+                              </form>
+                            ) : (
+                              <button type="button" onClick={() => { setResultExamId(ex.id); setExamResultDraft("") }} className="mt-3 min-h-9 rounded-lg px-3 text-xs font-semibold" style={{ background: "var(--secondary)", color: "var(--primary)" }}>Registrar resultado</button>
+                            )
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1726,8 +2094,21 @@ export default function DoctorDashboard({
             <div className="fade-in">
               <PageTitle
                 title="Agenda médica"
-                subtitle="Segunda-feira, 15 de setembro de 2026 · Consultório 12"
+                subtitle="Consultas compartilhadas com a recepção · Consultório 12"
               />
+              {rescheduleAppointmentId && (
+                <form onSubmit={handleReagendarConsulta} className="mb-4 flex flex-col gap-3 rounded-[var(--radius)] border p-4 sm:flex-row sm:items-end" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
+                  <label className="flex min-w-0 flex-1 flex-col gap-1 text-[10px] font-medium" style={{ color: "var(--muted-foreground)" }}>Nova data
+                    <input required type="date" min={localDateInputValue()} value={rescheduleForm.data} onChange={(event) => setRescheduleForm({ ...rescheduleForm, data: event.target.value })} className="min-h-11 rounded-lg border px-3 text-sm" style={{ background: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }} />
+                  </label>
+                  <label className="flex min-w-0 flex-1 flex-col gap-1 text-[10px] font-medium" style={{ color: "var(--muted-foreground)" }}>Novo horário
+                    <input required type="time" value={rescheduleForm.hora} onChange={(event) => setRescheduleForm({ ...rescheduleForm, hora: event.target.value })} className="min-h-11 rounded-lg border px-3 text-sm" style={{ background: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }} />
+                  </label>
+                  <button type="submit" className="min-h-11 rounded-lg px-4 text-xs font-semibold" style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}>Salvar novo horário</button>
+                  <button type="button" onClick={() => setRescheduleAppointmentId(null)} className="min-h-11 rounded-lg px-4 text-xs font-semibold" style={{ background: "var(--secondary)", color: "var(--primary)" }}>Cancelar</button>
+                  {rescheduleError && <p role="alert" className="text-xs font-semibold text-red-600 sm:col-span-2 xl:col-span-4">{rescheduleError}</p>}
+                </form>
+              )}
               <div
                 className="rounded-[var(--radius)] overflow-hidden"
                 style={{
@@ -1735,13 +2116,13 @@ export default function DoctorDashboard({
                   border: "1px solid var(--border)",
                 }}
               >
-                {agendaMedica.map((a, i) => (
+                {agendaExibida.map((a, i) => (
                   <div
-                    key={i}
-                    className="flex items-center gap-5 px-6 py-4"
+                    key={a.key}
+                    className="flex flex-col items-stretch gap-3 px-4 py-4 sm:flex-row sm:items-center sm:gap-5 sm:px-6"
                     style={{
                       borderBottom:
-                        i < agendaMedica.length - 1
+                        i < agendaExibida.length - 1
                           ? "1px solid var(--border)"
                           : "none",
                       background: a.concluido
@@ -1783,6 +2164,7 @@ export default function DoctorDashboard({
                         style={{ color: "var(--muted-foreground)" }}
                       >
                         {a.tipo} · {a.local}
+                        {a.data && ` · ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" }).format(new Date(a.data + "T12:00:00"))}`}
                       </div>
                     </div>
                     {a.concluido ? (
@@ -1796,23 +2178,26 @@ export default function DoctorDashboard({
                         Concluído
                       </span>
                     ) : (
-                      <div className="flex gap-2">
-                        <button
-                          className="text-xs px-3 py-1.5 rounded-lg cursor-pointer"
-                          style={{
-                            background: "var(--secondary)",
-                            color: "var(--foreground)",
-                            border: "1px solid var(--border)",
-                          }}
-                        >
-                          Reagendar
-                        </button>
-                        <button
-                          className="text-xs px-3 py-1.5 rounded-lg cursor-pointer text-white"
-                          style={{ background: "var(--primary)" }}
-                        >
-                          Iniciar
-                        </button>
+                      <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+                        {a.status === "Agendada" && (
+                          <button type="button" onClick={() => {
+                            setRescheduleAppointmentId(a.id)
+                            setRescheduleForm({ data: a.data, hora: a.hora })
+                            setRescheduleError("")
+                          }} className="min-h-9 flex-1 rounded-lg px-3 py-1.5 text-xs sm:flex-none" style={{ background: "var(--secondary)", color: "var(--foreground)", border: "1px solid var(--border)" }}>
+                            Reagendar
+                          </button>
+                        )}
+                        {a.status === "Em atendimento" ? (
+                          <>
+                            <span className="inline-flex min-h-9 items-center rounded-lg px-3 text-xs font-semibold" style={{ background: "var(--alert-surface)", color: "var(--primary)" }}>Em atendimento</span>
+                            <button type="button" onClick={() => handleConcluirConsulta(a.id)} className="min-h-9 flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold sm:flex-none" style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}>Concluir consulta</button>
+                          </>
+                        ) : (
+                          <button type="button" onClick={() => handleIniciarConsulta(a.id)} className="min-h-9 flex-1 rounded-lg px-3 py-1.5 text-xs text-white sm:flex-none" style={{ background: "var(--primary)" }}>
+                            Iniciar atendimento
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1828,9 +2213,9 @@ export default function DoctorDashboard({
                 subtitle="Pacientes internados sob sua responsabilidade"
               />
               <div className="flex flex-col gap-4">
-                {internacoes.map((int) => {
+                {internacoesExibidas.map((int) => {
                   const pac = pacientes.find((p) => p.id === int.pacienteId)
-                  const rc = registrosClinicos[int.pacienteId]?.[0]
+                  const rc = evolucoesClinicas[int.pacienteId]?.[0] ?? registrosClinicos[int.pacienteId]?.[0]
                   return (
                     <div
                       key={int.id}
@@ -1956,7 +2341,7 @@ export default function DoctorDashboard({
                           ))}
                         </div>
                       )}
-                      <div className="flex gap-2 mt-4">
+                      <div className="flex flex-wrap gap-2 mt-4">
                         <button
                           onClick={() => goToPatient(int.pacienteId)}
                           className="h-8 px-4 rounded-lg text-xs font-semibold text-white cursor-pointer"
@@ -1965,6 +2350,12 @@ export default function DoctorDashboard({
                           Evoluir prontuário
                         </button>
                         <button
+                          type="button"
+                          onClick={() => {
+                            setPrescriptionForm((current) => ({ ...current, pacienteId: int.pacienteId }))
+                            setShowPrescriptionForm(true)
+                            setActiveTab("prescricao")
+                          }}
                           className="h-8 px-4 rounded-lg text-xs font-semibold cursor-pointer"
                           style={{
                             background: "var(--secondary)",
@@ -1974,15 +2365,16 @@ export default function DoctorDashboard({
                         >
                           Nova prescrição
                         </button>
-                        <button
-                          className="h-8 px-4 rounded-lg text-xs font-semibold cursor-pointer"
-                          style={{
-                            background: "#E8F8F5",
-                            color: "var(--accent)",
-                          }}
-                        >
-                          Dar alta
-                        </button>
+                        {altaEmConfirmacaoId === int.id ? (
+                          <>
+                            <button type="button" onClick={() => handleDarAlta(int.pacienteId, int.id, int.leito)} className="min-h-8 rounded-lg px-3 text-xs font-semibold" style={{ background: "var(--accent)", color: "white" }}>Confirmar alta</button>
+                            <button type="button" onClick={() => setAltaEmConfirmacaoId(null)} className="min-h-8 rounded-lg px-3 text-xs font-semibold" style={{ background: "var(--secondary)", color: "var(--foreground)" }}>Cancelar</button>
+                          </>
+                        ) : (
+                          <button type="button" onClick={() => setAltaEmConfirmacaoId(int.id)} className="h-8 px-4 rounded-lg text-xs font-semibold cursor-pointer" style={{ background: "#E8F8F5", color: "var(--accent)" }}>
+                            Dar alta
+                          </button>
+                        )}
                       </div>
                     </div>
                   )
@@ -1991,19 +2383,21 @@ export default function DoctorDashboard({
             </div>
           )}
 
+          {activeTab === "atividades" && <ActivityLog />}
+
           {activeTab === "alertas" && (
             <div className="fade-in">
               <PageTitle
                 title="Alertas do sistema"
-                subtitle={`${alertasPendentes.length} alerta${
-                  alertasPendentes.length === 1 ? "" : "s"
+                subtitle={`${alertasPendentes.length + monitoringPendingCount} alerta${
+                  alertasPendentes.length + monitoringPendingCount === 1 ? "" : "s"
                 } pendente${
-                  alertasPendentes.length === 1 ? "" : "s"
+                  alertasPendentes.length + monitoringPendingCount === 1 ? "" : "s"
                 } de avaliação`}
                 action={
                   alertasPendentes.length > 0 ? (
                     <button
-                      onClick={markAllAlertsSeen}
+                      onClick={markAllAlertsRecognized}
                       className="h-9 px-4 rounded-lg text-xs font-semibold cursor-pointer"
                       style={{
                         background: "var(--secondary)",
@@ -2011,17 +2405,25 @@ export default function DoctorDashboard({
                         border: "1px solid var(--border)",
                       }}
                     >
-                      Marcar todos como vistos
+                      Reconhecer todos os alertas
                     </button>
                   ) : undefined
                 }
+              />
+
+              <MonitoringAlertsPanel
+                alerts={monitoringAlerts}
+                profile="Médico"
+                acknowledgedKeys={monitoringAcknowledged}
+                setAcknowledgedKeys={setMonitoringAcknowledged}
+                onOpenMonitoring={() => setActiveTab("monitoramento")}
               />
 
               <div className="grid grid-cols-1 gap-3">
                 {alertas.map((a) => {
                   const p = pacientes.find((x) => x.id === a.pacienteId)!
                   const c = riskColor[a.severity]
-                  const visto = alertasVistos.includes(a.id)
+                  const reconhecido = alertasReconhecidos.includes(a.id)
                   return (
                     <div
                       key={a.id}
@@ -2029,9 +2431,9 @@ export default function DoctorDashboard({
                       style={{
                         background: "var(--card)",
                         border: `1px solid ${
-                          visto ? "var(--border)" : c.dot + "55"
+                          reconhecido ? "var(--border)" : c.dot + "55"
                         }`,
-                        opacity: visto ? 0.62 : 1,
+                        opacity: reconhecido ? 0.62 : 1,
                       }}
                     >
                       <div className="flex items-start gap-4">
@@ -2055,6 +2457,7 @@ export default function DoctorDashboard({
                             >
                               {a.id}
                             </span>
+                            {reconhecido && <span className="rounded-full px-2 py-1 text-[10px] font-semibold" style={{ background: "var(--secondary)", color: "var(--muted-foreground)" }}>Reconhecido pela equipe</span>}
                           </div>
                           <h3
                             className="text-sm font-semibold mt-2"
@@ -2103,13 +2506,13 @@ export default function DoctorDashboard({
                                 className="text-[9px]"
                                 style={{ color: "var(--muted-foreground)" }}
                               >
-                                Atualização
+                                Data e horário
                               </div>
                               <div
                                 className="text-xs font-medium mt-1"
                                 style={{ color: "var(--foreground)" }}
                               >
-                                {a.horario}
+                                {a.data} · {a.horario}
                               </div>
                             </div>
                             <div>
@@ -2139,9 +2542,9 @@ export default function DoctorDashboard({
                             >
                               Visualizar prontuário
                             </button>
-                            {!visto && (
+                            {!reconhecido && (
                               <button
-                                onClick={() => markAlertSeen(a.id)}
+                                onClick={() => markAlertRecognized(a.id)}
                                 className="h-8 px-3 rounded-lg text-xs font-semibold cursor-pointer"
                                 style={{
                                   background: "var(--secondary)",
@@ -2149,7 +2552,7 @@ export default function DoctorDashboard({
                                   border: "1px solid var(--border)",
                                 }}
                               >
-                                Marcar como visto
+                                Reconhecer alerta
                               </button>
                             )}
                           </div>

@@ -1,7 +1,21 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import type { Screen } from "../App"
 import DashboardSidebar from "./DashboardSidebar"
 import ThemeToggle, { type Theme } from "./ThemeToggle"
+import VitalMonitoring from "./VitalMonitoring"
+import MonitoringAlertsPanel from "./MonitoringAlertsPanel"
+import ActivityLog from "./ActivityLog"
+import AlertNotifications from "./AlertNotifications"
+import type { MonitoringAlert } from "./VitalMonitoring"
+import { logActivity } from "./activityStore"
+import { CLINICAL_ALERT_ACK_STORAGE_KEY, clinicalAlertRecords, readLegacyClinicalAlertAcknowledgements } from "./clinicalAlertStore"
+import { CLINICAL_EVOLUTION_STORAGE_KEY, mergeClinicalEvolutions, readLegacyClinicalEvolutions, type ClinicalEvolutionMap } from "./clinicalEvolutionStore"
+import { PRESCRIPTION_STORAGE_KEY, type SharedPrescription } from "./prescriptionStore"
+import { MEDICATION_ADMINISTRATION_STORAGE_KEY, readMedicationAdministrations } from "./medicationAdministrationStore"
+import { HOSPITALIZATION_STORAGE_KEY, type Hospitalization } from "./hospitalizationStore"
+import useLocalStorageState from "./useLocalStorageState"
+import { formatLongLocalDate } from "./appointmentStore"
+import { BED_STORAGE_KEY, initialRegisteredBeds, initialRegisteredPatients, normalizeRegisteredBeds, PATIENT_STORAGE_KEY, type RegisteredBed, type RegisteredPatient } from "./patientStore"
 
 interface Props {
   onNavigate: (screen: Screen) => void
@@ -9,7 +23,7 @@ interface Props {
   onToggleTheme: () => void
 }
 
-type Tab = "internados" | "prescricao" | "administracao" | "evolucao" | "alertas"
+type Tab = "internados" | "monitoramento" | "prescricao" | "administracao" | "evolucao" | "atividades" | "alertas"
 
 type IconName = "users" | "clipboard" | "flask" | "bed" | "bell" | "alert" | "activity" | "image" | "ecg" | "chevron" | "arrow" | "search" | "check" | "x" | "pill" | "clock" | "send"
 
@@ -27,7 +41,7 @@ const ENFERMEIRA = {
 // ---------------------------------------------------------------------------
 // Pacientes internados — nomes brasileiros realistas
 // ---------------------------------------------------------------------------
-const pacientes = [
+const pacientesBase = [
   {
     id: "PAC-001",
     nome: "João Batista Ferreira",
@@ -453,53 +467,6 @@ const prescricoesPorPaciente: Record<string, PrescricaoItem[]> = {
   ],
 }
 
-const alertas = [
-  {
-    id: "ALT-001",
-    pacienteId: "PAC-003",
-    severity: "high" as const,
-    titulo: "Saturação de oxigênio abaixo do limite",
-    detalhe: "SpO₂ 88% — Pneumonia bacteriana",
-    horario: "Agora",
-    local: "Leito 14B",
-    valor: "88%",
-    label: "SpO₂",
-  },
-  {
-    id: "ALT-002",
-    pacienteId: "PAC-002",
-    severity: "medium" as const,
-    titulo: "Glicemia acima do limite",
-    detalhe: "Glicemia capilar 210 mg/dL",
-    horario: "Hoje, 08:30",
-    local: "Leito 08B",
-    valor: "210",
-    label: "mg/dL",
-  },
-  {
-    id: "ALT-003",
-    pacienteId: "PAC-005",
-    severity: "medium" as const,
-    titulo: "Pressão arterial elevada",
-    detalhe: "PA 165/105 mmHg",
-    horario: "Hoje, 07:30",
-    local: "Leito 22A",
-    valor: "165/105",
-    label: "mmHg",
-  },
-  {
-    id: "ALT-004",
-    pacienteId: "PAC-008",
-    severity: "medium" as const,
-    titulo: "Febre persistente",
-    detalhe: "Tax 38,2 °C — Pielonefrite aguda",
-    horario: "Hoje, 08:40",
-    local: "Leito 11B",
-    valor: "38,2",
-    label: "°C",
-  },
-]
-
 const riskColor = {
   low: { bg: "#E8F8F5", text: "#007F72", dot: "#00A896", label: "Estável" },
   medium: { bg: "#FFF8E6", text: "#A96800", dot: "#F5A623", label: "Atenção" },
@@ -669,36 +636,124 @@ export default function NurseDashboard({
   theme,
   onToggleTheme,
 }: Props) {
+  const [registeredPatients] = useLocalStorageState<RegisteredPatient[]>(PATIENT_STORAGE_KEY, initialRegisteredPatients)
+  const [registeredBeds, setRegisteredBeds] = useLocalStorageState<RegisteredBed[]>(BED_STORAGE_KEY, initialRegisteredBeds)
+  useEffect(() => setRegisteredBeds((current) => normalizeRegisteredBeds(current)), [setRegisteredBeds])
+  const [hospitalizations] = useLocalStorageState<Hospitalization[]>(HOSPITALIZATION_STORAGE_KEY, [])
+  const pacientes = useMemo(() => {
+    const knownIds = new Set(pacientesBase.map((patient) => patient.id))
+    const occupiedBeds = registeredBeds.filter((bed) => bed.status === "Ocupado" && bed.pacienteId)
+    const activePatientIds = new Set(
+      occupiedBeds.map((bed) => bed.pacienteId),
+    )
+    const synchronizedBase = pacientesBase.filter((patient) => activePatientIds.has(patient.id)).map((patient) => {
+      const registered = registeredPatients.find((item) => item.id === patient.id)
+      const bed = occupiedBeds.find((item) => item.pacienteId === patient.id)
+      const admission = hospitalizations.find((item) => item.pacienteId === patient.id && item.status === "Ativa")
+      const parts = registered?.dataNasc.split("/").map(Number) ?? []
+      const birthDate = new Date(parts[2] ?? 2000, (parts[1] ?? 1) - 1, parts[0] ?? 1)
+      const today = new Date()
+      const age = Math.max(0, today.getFullYear() - birthDate.getFullYear() - (today < new Date(today.getFullYear(), birthDate.getMonth(), birthDate.getDate()) ? 1 : 0))
+      const name = registered?.nome ?? patient.nome
+      return {
+        ...patient,
+        nome: name,
+        idade: registered ? age : patient.idade,
+        sexo: registered?.sexo ?? patient.sexo,
+        avatar: name.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase(),
+        leito: bed?.numero ?? patient.leito,
+        ala: bed?.setor ?? bed?.tipo ?? patient.ala,
+        condicao: admission?.motivo ?? patient.condicao,
+        medico: admission?.medico ?? patient.medico,
+        entrada: admission?.dataEntrada ?? patient.entrada,
+      }
+    })
+    const additions = registeredPatients
+      .filter((patient) => !knownIds.has(patient.id) && activePatientIds.has(patient.id))
+      .map((patient) => {
+        const bed = registeredBeds.find((item) => item.pacienteId === patient.id && item.status === "Ocupado")
+        const admission = hospitalizations.find((item) => item.pacienteId === patient.id && item.status === "Ativa")
+        const parts = patient.dataNasc.split("/").map(Number)
+        const birthDate = new Date(parts[2] ?? 2000, (parts[1] ?? 1) - 1, parts[0] ?? 1)
+        const today = new Date()
+        const idade = Math.max(0, today.getFullYear() - birthDate.getFullYear() - (today < new Date(today.getFullYear(), birthDate.getMonth(), birthDate.getDate()) ? 1 : 0))
+        return {
+          id: patient.id,
+          nome: patient.nome,
+          idade,
+          sexo: patient.sexo,
+          condicao: admission?.motivo ?? "Aguardando avaliação",
+          status: "estável",
+          avatar: patient.nome.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase(),
+          leito: bed?.numero ?? "—",
+          ala: bed?.setor ?? bed?.tipo ?? "Setor a definir",
+          risco: "low",
+          prescricaoAtiva: false,
+          medico: admission?.medico ?? "Equipe médica",
+          entrada: admission?.dataEntrada ?? "Hoje",
+        }
+      })
+    return [...synchronizedBase, ...additions]
+  }, [hospitalizations, registeredBeds, registeredPatients])
   const [activeTab, setActiveTab] = useState<Tab>("internados")
   const [selectedPaciente, setSelectedPaciente] =
     useState<typeof pacientes[0] | null>(pacientes[0])
-  const [alertasAtendidos, setAlertasAtendidos] = useState<string[]>([])
+  useEffect(() => {
+    setSelectedPaciente((current) => current ? pacientes.find((patient) => patient.id === current.id) ?? pacientes[0] ?? null : null)
+  }, [pacientes])
+  const [alertasReconhecidos, setAlertasReconhecidos] = useLocalStorageState<string[]>(CLINICAL_ALERT_ACK_STORAGE_KEY, readLegacyClinicalAlertAcknowledgements)
+  const [monitoringAlerts, setMonitoringAlerts] = useLocalStorageState<MonitoringAlert[]>("inteliHosp-enfermagem-monitoramento-alertas", [])
+  const [monitoringAcknowledged, setMonitoringAcknowledged] = useLocalStorageState<string[]>("inteliHosp-monitoramento-reconhecidos", [])
+  const monitoringPendingCount = monitoringAlerts.filter((alert) => !monitoringAcknowledged.includes(alert.key)).length
+  const getPatientRisk = (patient: typeof pacientes[number]) => {
+    const alerts = monitoringAlerts.filter((alert) => alert.patientId === patient.id)
+    if (alerts.some((alert) => alert.severity === "Crítico")) return "high"
+    if (alerts.some((alert) => alert.severity === "Moderado")) return patient.risco === "high" ? "high" : "medium"
+    if (alerts.some((alert) => alert.severity === "Informativo")) return patient.risco === "low" ? "medium" : patient.risco
+    return patient.risco
+  }
   const [patientSearch, setPatientSearch] = useState("")
-  const [administrados, setAdministrados] = useState<string[]>([])
+  const [administrados, setAdministrados] = useLocalStorageState<string[]>(MEDICATION_ADMINISTRATION_STORAGE_KEY, readMedicationAdministrations)
+  const [prescricoesCompartilhadas] = useLocalStorageState<SharedPrescription[]>(PRESCRIPTION_STORAGE_KEY, [])
   const [evolucaoTexto, setEvolucaoTexto] = useState("")
   const [evolucaoEnviada, setEvolucaoEnviada] = useState(false)
 
   const [evolucoesPorPaciente, setEvolucoesPorPaciente] =
-    useState<typeof registrosClinicosIniciais>(registrosClinicosIniciais)
+    useLocalStorageState<ClinicalEvolutionMap>(CLINICAL_EVOLUTION_STORAGE_KEY, () => readLegacyClinicalEvolutions(registrosClinicosIniciais))
+  useEffect(() => setEvolucoesPorPaciente((current) => mergeClinicalEvolutions(current, registrosClinicosIniciais)), [setEvolucoesPorPaciente])
 
-  const agora = "14:32"
+  const prescricoesEquipe = useMemo(() => {
+    const result: Record<string, PrescricaoItem[]> = Object.fromEntries(
+      Object.entries(prescricoesPorPaciente).map(([patientId, items]) => [patientId, [...items]]),
+    )
+    for (const prescription of prescricoesCompartilhadas) {
+      const item: PrescricaoItem = { ...prescription.item, status: "pendente" }
+      result[prescription.pacienteId] = [item, ...(result[prescription.pacienteId] ?? [])]
+    }
+    return result
+  }, [prescricoesCompartilhadas])
 
-  const alertasPendentes = alertas.filter(
-    (a) => !alertasAtendidos.includes(a.id),
-  )
+  const agora = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" }).format(new Date())
 
-  const filteredPatients = pacientes.filter((p) =>
+  const alertas = clinicalAlertRecords
+  const alertasAtivos = alertas.filter((alert) => pacientes.some((patient) => patient.id === alert.pacienteId))
+  const alertasPendentes = alertasAtivos.filter((alert) => !alertasReconhecidos.includes(alert.id))
+
+  const filteredPatients = useMemo(() => pacientes.filter((p) =>
     `${p.nome} ${p.id} ${p.condicao} ${p.leito}`
       .toLowerCase()
       .includes(patientSearch.toLowerCase()),
-  )
+  ), [pacientes, patientSearch])
+  useEffect(() => {
+    setSelectedPaciente((current) => current && !filteredPatients.some((patient) => patient.id === current.id) ? null : current)
+  }, [filteredPatients])
 
   const prescricaoAtual = useMemo(() => {
     if (!selectedPaciente) return []
-    return [...(prescricoesPorPaciente[selectedPaciente.id] ?? [])].sort(
+    return [...(prescricoesEquipe[selectedPaciente.id] ?? [])].sort(
       (a, b) => a.horario.localeCompare(b.horario),
     )
-  }, [selectedPaciente])
+  }, [prescricoesEquipe, selectedPaciente])
 
   const goToPatient = (id: string, tab: Tab = "prescricao") => {
     const patient = pacientes.find((p) => p.id === id)
@@ -708,16 +763,20 @@ export default function NurseDashboard({
     }
   }
 
-  const markAlertAtendido = (id: string) => {
-    setAlertasAtendidos((current) =>
+  const markAlertRecognized = (id: string) => {
+    logActivity("Enfermagem", "Alerta reconhecido", "Alerta", id)
+    setAlertasReconhecidos((current) =>
       current.includes(id) ? current : [...current, id],
     )
   }
 
-  const markAllAlertasAtendidos = () =>
-    setAlertasAtendidos(alertas.map((a) => a.id))
+  const markAllAlertasRecognized = () => {
+    if (alertasPendentes.length) logActivity("Enfermagem", "Alertas reconhecidos", "Central de alertas", `${alertasPendentes.length} alertas`)
+    setAlertasReconhecidos((current) => [...new Set([...current, ...alertasAtivos.map((alert) => alert.id)])])
+  }
 
   const confirmarAdministracao = (itemId: string) => {
+    if (!administrados.includes(itemId)) logActivity("Enfermagem", "Administração registrada", "Medicação demonstrativa", itemId)
     setAdministrados((current) =>
       current.includes(itemId) ? current : [...current, itemId],
     )
@@ -726,13 +785,12 @@ export default function NurseDashboard({
   const enviarEvolucao = () => {
     if (!evolucaoTexto.trim() || !selectedPaciente) return
 
+    const now = new Date()
     const novaEvolucao = {
-      data: `Hoje, ${agora}`,
+      data: new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(now),
       descricao: evolucaoTexto.trim(),
-      pressao: "—",
-      fc: 0,
-      temp: 0,
-      spo2: 0,
+      perfil: "Enfermagem" as const,
+      profissional: ENFERMEIRA.assinatura,
     }
 
     setEvolucoesPorPaciente((current) => ({
@@ -742,6 +800,7 @@ export default function NurseDashboard({
         ...(current[selectedPaciente.id] ?? []),
       ],
     }))
+    logActivity("Enfermagem", "Evolução registrada", "Prontuário demonstrativo", selectedPaciente.id)
 
     setEvolucaoEnviada(true)
     setEvolucaoTexto("")
@@ -750,9 +809,11 @@ export default function NurseDashboard({
 
   const tabs: { key: Tab; label: string }[] = [
     { key: "internados", label: "Pacientes Internados" },
+    { key: "monitoramento", label: "Monitoramento" },
     { key: "prescricao", label: "Prescrições" },
     { key: "administracao", label: "Administração" },
     { key: "evolucao", label: "Evolução Clínica" },
+    { key: "atividades", label: "Registro de Atividades" },
     { key: "alertas", label: "Alertas" },
   ]
 
@@ -765,7 +826,7 @@ export default function NurseDashboard({
     subtitle: string
     action?: React.ReactNode
   }) => (
-    <div className="flex items-start justify-between gap-4 mb-6">
+    <div className="flex flex-col items-stretch justify-between gap-3 mb-6 sm:flex-row sm:items-start sm:gap-4">
       <div>
         <h1
           className="text-2xl md:text-3xl font-semibold tracking-tight"
@@ -785,9 +846,9 @@ export default function NurseDashboard({
   )
 
   const PacienteInternadoCard = ({ p }: { p: typeof pacientes[0] }) => {
-    const c = riskColor[(p.risco as keyof typeof riskColor)]
+    const c = riskColor[getPatientRisk(p) as keyof typeof riskColor]
     const rc = evolucoesPorPaciente[p.id]?.[0]
-    const presc = prescricoesPorPaciente[p.id] ?? []
+    const presc = prescricoesEquipe[p.id] ?? []
     const pendentes = presc.filter(
       (i) => i.status !== "administrado" && !administrados.includes(i.id),
     ).length
@@ -867,7 +928,7 @@ export default function NurseDashboard({
           )}
         </div>
 
-        {rc && rc.fc > 0 && (
+        {rc && rc.fc !== undefined && rc.fc > 0 && (
           <div className="grid grid-cols-4 gap-2 mt-3">
             {[
               { label: "PA", value: rc.pressao, unit: "" },
@@ -926,6 +987,7 @@ export default function NurseDashboard({
 
   return (
     <div className="min-h-screen" style={{ background: "var(--background)" }}>
+      <AlertNotifications alerts={monitoringAlerts} profile="Enfermagem" onOpenAlerts={() => setActiveTab("alertas")} />
       <DashboardSidebar
         role="Enfermagem"
         initials={ENFERMEIRA.iniciais}
@@ -935,7 +997,7 @@ export default function NurseDashboard({
         activeTab={activeTab}
         onSelect={(key) => setActiveTab(key as Tab)}
         onLogout={() => onNavigate("login")}
-        alertCount={alertasPendentes.length}
+        alertCount={alertasPendentes.length + monitoringPendingCount}
         theme={theme}
         onToggleTheme={onToggleTheme}
       />
@@ -970,12 +1032,28 @@ export default function NurseDashboard({
         </header>
 
         <main className="dashboard-main mx-auto w-full min-w-0 max-w-7xl flex-1 px-4 pb-24 pt-20 sm:px-6 xl:p-6">
+          <div className={activeTab === "monitoramento" ? "block" : "hidden"} aria-hidden={activeTab !== "monitoramento"}>
+            <VitalMonitoring
+              profile="Enfermagem"
+              storageKey="inteliHosp-monitoramento"
+              onAlertsChange={setMonitoringAlerts}
+              acknowledgedAlerts={monitoringAcknowledged}
+              setAcknowledgedAlerts={setMonitoringAcknowledged}
+              patients={pacientes.map((patient) => ({
+                id: patient.id,
+                name: patient.nome,
+                bed: patient.leito,
+                sector: patient.ala,
+                condition: patient.condicao,
+              }))}
+            />
+          </div>
           {/* ============ INTERNADOS ============ */}
           {activeTab === "internados" && (
             <div className="fade-in">
               <PageTitle
                 title={`Bom dia, ${ENFERMEIRA.nome.split(" ")[0]}`}
-                subtitle="Segunda-feira, 15 de setembro de 2026 · Plantão diurno"
+                subtitle={`${formatLongLocalDate()} · Plantão diurno`}
               />
 
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -997,7 +1075,7 @@ export default function NurseDashboard({
                   {
                     label: "Medicações pendentes",
                     value: String(
-                      Object.values(prescricoesPorPaciente)
+                      Object.values(prescricoesEquipe)
                         .flat()
                         .filter(
                           (i) =>
@@ -1607,7 +1685,7 @@ export default function NurseDashboard({
                         >
                           Profissional: {ENFERMEIRA.assinatura}
                         </span>
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2">
                           {evolucaoEnviada && (
                             <span
                               className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg"
@@ -1678,7 +1756,7 @@ export default function NurseDashboard({
                                 className="text-[10px] mt-2"
                                 style={{ color: "var(--muted-foreground)" }}
                               >
-                                {ENFERMEIRA.assinatura}
+                                {rc.profissional ?? ENFERMEIRA.assinatura}
                               </div>
                             </div>
                           ),
@@ -1701,19 +1779,21 @@ export default function NurseDashboard({
           )}
 
           {/* ============ ALERTAS ============ */}
+          {activeTab === "atividades" && <ActivityLog />}
+
           {activeTab === "alertas" && (
             <div className="fade-in">
               <PageTitle
                 title="Central de alertas"
-                subtitle={`${alertasPendentes.length} alerta${
-                  alertasPendentes.length === 1 ? "" : "s"
+                subtitle={`${alertasPendentes.length + monitoringPendingCount} alerta${
+                  alertasPendentes.length + monitoringPendingCount === 1 ? "" : "s"
                 } pendente${
-                  alertasPendentes.length === 1 ? "" : "s"
+                  alertasPendentes.length + monitoringPendingCount === 1 ? "" : "s"
                 } de atendimento`}
                 action={
                   alertasPendentes.length > 0 ? (
                     <button
-                      onClick={markAllAlertasAtendidos}
+                      onClick={markAllAlertasRecognized}
                       className="h-9 px-4 rounded-lg text-xs font-semibold cursor-pointer"
                       style={{
                         background: "var(--secondary)",
@@ -1721,17 +1801,25 @@ export default function NurseDashboard({
                         border: "1px solid var(--border)",
                       }}
                     >
-                      Marcar todos como atendidos
+                      Reconhecer todos os alertas
                     </button>
                   ) : undefined
                 }
               />
 
+              <MonitoringAlertsPanel
+                alerts={monitoringAlerts}
+                profile="Enfermagem"
+                acknowledgedKeys={monitoringAcknowledged}
+                setAcknowledgedKeys={setMonitoringAcknowledged}
+                onOpenMonitoring={() => setActiveTab("monitoramento")}
+              />
+
               <div className="grid grid-cols-1 gap-3">
-                {alertas.map((a) => {
+                {alertasAtivos.map((a) => {
                   const p = pacientes.find((x) => x.id === a.pacienteId)!
                   const c = riskColor[a.severity]
-                  const atendido = alertasAtendidos.includes(a.id)
+                  const reconhecido = alertasReconhecidos.includes(a.id)
                   return (
                     <div
                       key={a.id}
@@ -1739,9 +1827,9 @@ export default function NurseDashboard({
                       style={{
                         background: "var(--card)",
                         border: `1px solid ${
-                          atendido ? "var(--border)" : c.dot + "55"
+                          reconhecido ? "var(--border)" : c.dot + "55"
                         }`,
-                        opacity: atendido ? 0.62 : 1,
+                        opacity: reconhecido ? 0.62 : 1,
                       }}
                     >
                       <div className="flex items-start gap-4">
@@ -1765,6 +1853,7 @@ export default function NurseDashboard({
                             >
                               {a.id}
                             </span>
+                            {reconhecido && <span className="rounded-full px-2 py-1 text-[10px] font-semibold" style={{ background: "var(--secondary)", color: "var(--muted-foreground)" }}>Reconhecido pela equipe</span>}
                           </div>
                           <h3
                             className="text-sm font-semibold mt-2"
@@ -1813,13 +1902,13 @@ export default function NurseDashboard({
                                 className="text-[9px]"
                                 style={{ color: "var(--muted-foreground)" }}
                               >
-                                Atualização
+                                Data e horário
                               </div>
                               <div
                                 className="text-xs font-medium mt-1"
                                 style={{ color: "var(--foreground)" }}
                               >
-                                {a.horario}
+                                {a.data} · {a.horario}
                               </div>
                             </div>
                             <div>
@@ -1849,9 +1938,9 @@ export default function NurseDashboard({
                             >
                               Ver prescrição
                             </button>
-                            {!atendido && (
+                            {!reconhecido && (
                               <button
-                                onClick={() => markAlertAtendido(a.id)}
+                                onClick={() => markAlertRecognized(a.id)}
                                 className="h-8 px-3 rounded-lg text-xs font-semibold cursor-pointer"
                                 style={{
                                   background: "#E8F8F5",
@@ -1859,7 +1948,7 @@ export default function NurseDashboard({
                                   border: "1px solid #00A89633",
                                 }}
                               >
-                                Marcar como atendido
+                                Reconhecer alerta
                               </button>
                             )}
                           </div>
