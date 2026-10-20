@@ -1,0 +1,352 @@
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import 'tailwindcss';
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 4px);
+
+  --font-sans: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+:root {
+  color-scheme: light;
+
+  --background: #F0F4F8;
+  --foreground: #0D1B2A;
+
+  --card: #FFFFFF;
+  --card-foreground: #0D1B2A;
+
+  --primary: #0A3060;
+  --primary-foreground: #FFFFFF;
+
+  --secondary: #E8EFF7;
+  --secondary-foreground: #0D1B2A;
+
+  --muted: #D8E3EF;
+  --muted-foreground: #5A7A96;
+
+  --accent: #00A896;
+  --accent-foreground: #FFFFFF;
+
+  --border: #C8D8E8;
+  --ring: #0A3060;
+
+  --radius: 10px;
+
+  --alert-surface: #FFF8F6;
+  --alert-border: #F3D2C8;
+  --alert-foreground: #B8322A;
+  --alert-icon-bg: #FDEDEC;
+  --control-foreground: #0A3060;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --background: #091521;
+  --foreground: #E8F0F7;
+
+  --card: #102232;
+  --card-foreground: #E8F0F7;
+
+  --primary: #1B5A8A;
+  --primary-foreground: #FFFFFF;
+
+  --secondary: #183247;
+  --secondary-foreground: #E8F0F7;
+
+  --muted: #203B50;
+  --muted-foreground: #A6BDCE;
+
+  --accent: #00BCA8;
+  --accent-foreground: #06221F;
+
+  --border: #29465B;
+  --ring: #5BA7D8;
+
+  --alert-surface: #2A211F;
+  --alert-border: #653A34;
+  --alert-foreground: #FF9B89;
+  --alert-icon-bg: #4A2B28;
+  --control-foreground: #8BD5F4;
+}
+
+:root[data-theme="dark"] .app-logo {
+  filter: brightness(0) invert(1);
+}
+
+:root[data-theme="dark"] [style*="color: var(--primary)"] {
+  color: var(--control-foreground) !important;
+}
+
+:root:not([data-theme="dark"]) .app-logo {
+  filter: brightness(1.15) saturate(1.1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+  opacity: 0;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 99px;
+}
+
+*:hover::-webkit-scrollbar-thumb {
+  background: var(--muted-foreground);
+}
+
+/* Screen transitions */
+.screen-enter {
+  animation: screenIn 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.screen-exit {
+  animation: screenOut 0.25s ease-in forwards;
+}
+
+@keyframes screenIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.99);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes screenOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+.slide-up {
+  animation: slideUp 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/* Pulse for vitals */
+@keyframes pulse-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+
+  50% {
+    transform: scale(1.12);
+    opacity: 0.4;
+  }
+
+  100% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+}
+
+.pulse-dot {
+  animation: pulse-ring 2s ease-in-out infinite;
+}
+
+@media (max-width: 639px) {
+  button,
+  input,
+  select,
+  textarea {
+    touch-action: manipulation;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  .dashboard-main,
+  .dashboard-main .fade-in {
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
+  .dashboard-main [class~="grid"] > *,
+  .dashboard-main [class~="flex"] > * {
+    min-width: 0;
+  }
+
+  .dashboard-main [class~="p-6"] {
+    padding: 1rem;
+  }
+
+  .dashboard-main [class~="px-6"] {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .dashboard-main [class~="justify-between"][class~="items-start"] {
+    flex-wrap: wrap;
+  }
+
+  .dashboard-main [class~="flex"][class~="gap-2"] {
+    flex-wrap: wrap;
+  }
+
+  .dashboard-main input,
+  .dashboard-main select,
+  .dashboard-main textarea {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .dashboard-main table {
+    min-width: 600px;
+  }
+}
+
+@media (max-width: 380px) {
+  .dashboard-main {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+
+  .dashboard-main [class~="grid-cols-2"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dashboard-main [class~="grid-cols-3"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.ecg-trace {
+  stroke-dasharray: 360;
+  stroke-dashoffset: 360;
+  animation: ecg-draw 2.4s linear infinite;
+}
+
+@keyframes ecg-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ecg-trace {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
+
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+
+  .monitoring-printable,
+  .monitoring-printable * {
+    visibility: visible !important;
+  }
+
+  .monitoring-printable {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+    border: 0 !important;
+    background: #fff !important;
+    color: #0d1b2a !important;
+    box-shadow: none !important;
+    print-color-adjust: exact;
+  }
+
+  .monitoring-printable button {
+    display: none !important;
+  }
+
+  .monitoring-printable .max-h-56 {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+}
