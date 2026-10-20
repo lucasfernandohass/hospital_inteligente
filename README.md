@@ -136,6 +136,23 @@ As tecnologias utilizadas no projeto incluem:
 
 > *A lista será atualizada conforme novas tecnologias forem incorporadas ao projeto.*
 
+### Executar o frontend
+
+O frontend está em `frontend/` e utiliza React, TypeScript, Vite e Tailwind CSS v4.
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+Para validar os tipos e gerar a versão de produção:
+
+```bash
+npm run typecheck
+npm run build
+```
+
 ---
 
 ## Estrutura do Projeto
