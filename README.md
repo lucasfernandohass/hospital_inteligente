@@ -7,7 +7,7 @@
 
 ## Requisitos
 
-- Node.js 20.19+ ou 22.12+
+- Node.js 20.19+ ou 22.12+ ( Versões minimas exigidas ) 
 - npm
 
 ## Instalar e executar
