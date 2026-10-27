@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { logActivity } from "./activityStore"
+import { PageTitle } from "./ui"
 
 interface MonitoredPatient {
   id: string
@@ -7,6 +8,8 @@ interface MonitoredPatient {
   bed: string
   sector: string
   condition: string
+  /** Última pressão arterial registrada no prontuário (a simulação não mede PA). */
+  bloodPressure?: string
 }
 
 interface VitalSample {
@@ -274,12 +277,16 @@ function points(values: number[], min: number, max: number) {
     .join(" ")
 }
 
-function Metric({ label, value, unit }: { label: string; value: string; unit: string }) {
+function Metric({ label, short, value, unit, color, alarm = false, offline = false }: { label: string; short: string; value: string; unit: string; color: string; alarm?: boolean; offline?: boolean }) {
+  const tone = offline ? "var(--monitor-muted)" : alarm ? "var(--vital-alarm)" : color
   return (
-    <div className="rounded-xl p-3" style={{ background: "var(--background)" }}>
-      <p className="text-[10px] font-medium" style={{ color: "var(--muted-foreground)" }}>{label}</p>
-      <p className="mt-1 text-lg font-bold tabular-nums" style={{ color: "var(--foreground)" }}>
-        {value} <span className="text-[10px] font-medium" style={{ color: "var(--muted-foreground)" }}>{unit}</span>
+    <div className="monitor-tile rounded-lg px-3 py-2.5" style={alarm && !offline ? { borderColor: "color-mix(in srgb, var(--vital-alarm) 55%, transparent)" } : undefined}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] font-bold tracking-wide" style={{ color: tone }} title={label}>{short}</p>
+        <p className="truncate text-[11px]" style={{ color: "var(--monitor-muted)" }}>{unit}</p>
+      </div>
+      <p className="monitor-value mt-1.5 text-[2rem]" style={{ color: tone }} aria-label={label + ": " + value + " " + unit}>
+        {offline ? "--" : value}
       </p>
     </div>
   )
@@ -287,7 +294,8 @@ function Metric({ label, value, unit }: { label: string; value: string; unit: st
 
 export default function VitalMonitoring({ patients, profile, storageKey, acknowledgedAlerts, setAcknowledgedAlerts, onAlertsChange }: Props) {
   const [records, setRecords] = useState(() => readSavedRecords(storageKey, patients))
-  const activePatientIds = useMemo(() => new Set(patients.map((patient) => patient.id)), [patients])
+  const patientIdsKey = patients.map((patient) => patient.id).join("|")
+  const activePatientIds = useMemo(() => new Set(patientIdsKey ? patientIdsKey.split("|") : []), [patientIdsKey])
   const [thresholds, setThresholds] = useState(() => readSavedThresholds(storageKey + "-thresholds"))
   const [filter, setFilter] = useState<Filter>("all")
   const [query, setQuery] = useState("")
@@ -304,12 +312,15 @@ export default function VitalMonitoring({ patients, profile, storageKey, acknowl
     setRecords((current) => {
       const byId = new Map(current.map((record) => [record.id, record]))
       const missing = patients.filter((patient) => !byId.has(patient.id))
-      const newRecords = makeRecords(missing)
-      const additions = new Map(newRecords.map((record) => [record.id, record]))
-      return current.map((record) => {
+      let changed = missing.length > 0
+      const updated = current.map((record) => {
         const patient = patients.find((item) => item.id === record.id)
-        return patient ? { ...record, ...patient } : record
-      }).concat(newRecords).map((record) => additions.get(record.id) ?? record)
+        if (!patient) return record
+        if (record.name === patient.name && record.bed === patient.bed && record.sector === patient.sector && record.condition === patient.condition && record.bloodPressure === patient.bloodPressure) return record
+        changed = true
+        return { ...record, ...patient }
+      })
+      return changed ? updated.concat(makeRecords(missing)) : current
     })
   }, [patients])
 
@@ -530,24 +541,27 @@ export default function VitalMonitoring({ patients, profile, storageKey, acknowl
 
   return (
     <section className="fade-in min-w-0 space-y-5" aria-labelledby="monitoramento-title">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 id="monitoramento-title" className="text-2xl font-bold sm:text-3xl" style={{ color: "var(--foreground)" }}>Monitoramento de sinais vitais</h1>
-          <p className="mt-1 text-sm" style={{ color: "var(--muted-foreground)" }}>Acompanhamento demonstrativo de pacientes e dispositivos conectados.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex min-h-9 items-center gap-2 rounded-full px-3 text-xs font-semibold" style={{ background: "var(--secondary)", color: "var(--primary)" }}>
-            <span className="h-2 w-2 animate-pulse rounded-full" style={{ background: "var(--accent)" }} />
-            Simulação ao vivo
-          </span>
-          <button type="button" onClick={() => { setShowDeviceForm((value) => !value); setDeviceError("") }} className="min-h-10 rounded-xl px-3 text-xs font-semibold" style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}>
-            {showDeviceForm ? "Fechar vínculo" : "Vincular dispositivo"}
-          </button>
-        </div>
+      <div id="monitoramento-title" className="-mb-1">
+        <PageTitle
+          eyebrow={"Monitoramento · " + profile}
+          title="Monitoramento de sinais vitais"
+          subtitle="Acompanhamento demonstrativo de pacientes e dispositivos conectados."
+          action={
+            <>
+              <span className="inline-flex min-h-10 items-center gap-2 rounded-full border px-3 text-xs font-semibold" style={{ background: "var(--success-surface)", borderColor: "color-mix(in srgb, var(--success) 35%, transparent)", color: "var(--success-foreground)" }}>
+                <span className="h-2 w-2 animate-pulse rounded-full" style={{ background: "var(--success)" }} />
+                Simulação ao vivo
+              </span>
+              <button type="button" onClick={() => { setShowDeviceForm((value) => !value); setDeviceError("") }} className="min-h-10 rounded-xl px-4 text-sm font-semibold" style={{ background: showDeviceForm ? "var(--secondary)" : "var(--primary)", color: showDeviceForm ? "var(--control-foreground)" : "var(--primary-foreground)" }}>
+                {showDeviceForm ? "Fechar vínculo" : "Vincular dispositivo"}
+              </button>
+            </>
+          }
+        />
       </div>
 
       {showDeviceForm && (
-        <form onSubmit={saveDevice} className="grid grid-cols-1 gap-3 rounded-[var(--radius)] border p-4 sm:grid-cols-2 xl:grid-cols-4" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
+        <form onSubmit={saveDevice} className="slide-up grid grid-cols-1 gap-3 rounded-[var(--radius)] border p-5 sm:grid-cols-2 xl:grid-cols-4" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
           <label className="flex min-w-0 flex-col gap-1.5 text-xs font-medium" style={{ color: "var(--muted-foreground)" }}>
             Paciente
             <select required value={devicePatientId} onChange={(event) => setDevicePatientId(event.target.value)} className="min-h-11 rounded-xl border px-3 text-sm" style={controlStyle}>
@@ -572,23 +586,23 @@ export default function VitalMonitoring({ patients, profile, storageKey, acknowl
               Salvar vínculo simulado
             </button>
           </div>
-          <p className="text-[10px] sm:col-span-2 xl:col-span-4" style={{ color: "var(--muted-foreground)" }}>
+          <p className="text-xs sm:col-span-2 xl:col-span-4" style={{ color: "var(--muted-foreground)" }}>
             Os dados do vínculo ficam salvos somente neste navegador.
           </p>
           {deviceError && <p role="alert" className="text-xs font-semibold text-red-600 sm:col-span-2 xl:col-span-4">{deviceError}</p>}
         </form>
       )}
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="keep-2-cols grid grid-cols-2 gap-3 xl:grid-cols-4">
         {[
-          { label: "Pacientes acompanhados", value: visibleRecords.length, color: "var(--primary)" },
-          { label: "Sem limites excedidos", value: stableCount, color: "var(--accent)" },
-          { label: "Com parâmetros de atenção", value: attentionCount, color: "var(--alert-foreground)" },
-          { label: "Dispositivos desconectados", value: offlineCount, color: "var(--muted-foreground)" },
+          { label: "Pacientes acompanhados", value: visibleRecords.length, color: "var(--foreground)", dot: "var(--info)" },
+          { label: "Sem limites excedidos", value: stableCount, color: "var(--success-foreground)", dot: "var(--success)" },
+          { label: "Com parâmetros de atenção", value: attentionCount, color: attentionCount ? "var(--danger-foreground)" : "var(--foreground)", dot: "var(--danger)" },
+          { label: "Dispositivos desconectados", value: offlineCount, color: "var(--neutral-foreground)", dot: "var(--neutral)" },
         ].map((item) => (
-          <div key={item.label} className="rounded-[var(--radius)] border p-4 sm:p-5" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
-            <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>{item.label}</p>
-            <p className="mt-2 text-2xl font-bold" style={{ color: item.color }}>{item.value}</p>
+          <div key={item.label} className="rounded-[var(--radius)] border p-4" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
+            <p className="flex items-start gap-2 text-xs font-medium leading-tight" style={{ color: "var(--muted-foreground)" }}><span className="mt-1 h-2 w-2 shrink-0 rounded-full" style={{ background: item.dot }} />{item.label}</p>
+            <p className="mt-1.5 text-2xl font-bold tabular-nums" style={{ color: item.color }}>{item.value}</p>
           </div>
         ))}
       </div>
@@ -624,39 +638,58 @@ export default function VitalMonitoring({ patients, profile, storageKey, acknowl
               const critical = isCritical(record)
               const active = selected?.id === record.id
               return (
-                <article key={record.id} className="min-w-0 rounded-[var(--radius)] border p-4 transition-colors" style={{ background: "var(--card)", borderColor: active ? "var(--accent)" : "var(--border)" }}>
-                  <button type="button" onClick={() => setSelectedId(record.id)} className="w-full min-w-0 text-left" aria-pressed={active}>
+                <article
+                  key={record.id}
+                  className="monitor-screen min-w-0 rounded-[var(--radius)] p-3.5 transition-shadow"
+                  style={{
+                    borderColor: active ? "var(--vital-spo2)" : critical ? "color-mix(in srgb, var(--vital-alarm) 60%, transparent)" : undefined,
+                    boxShadow: active ? "0 0 0 2px color-mix(in srgb, var(--vital-spo2) 35%, transparent), var(--shadow-md)" : "var(--shadow-sm)",
+                  }}
+                >
+                  <button type="button" onClick={() => setSelectedId(record.id)} className="w-full min-w-0 rounded-md text-left" aria-pressed={active} aria-label={"Selecionar " + record.name + ", leito " + record.bed}>
                     <div className="flex min-w-0 items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <h2 className="truncate text-sm font-bold" style={{ color: "var(--foreground)" }}>{record.name}</h2>
-                        <p className="mt-1 truncate text-xs" style={{ color: "var(--muted-foreground)" }}>Leito {record.bed} · {record.sector}</p>
+                        <h2 className="truncate text-sm font-bold" style={{ color: "var(--monitor-text)" }}>{record.name}</h2>
+                        <p className="mt-0.5 truncate text-xs" style={{ color: "var(--monitor-muted)" }}>Leito {record.bed} · {record.sector}</p>
                       </div>
-                      <span className="shrink-0 rounded-full px-2 py-1 text-[10px] font-bold" style={{ background: attention ? "var(--alert-icon-bg)" : "var(--secondary)", color: attention ? "var(--alert-foreground)" : "var(--primary)" }}>
+                      <span
+                        className="shrink-0 rounded-md px-2 py-1 text-[11px] font-bold uppercase tracking-wide"
+                        style={{
+                          background: critical ? "var(--badge-danger)" : attention ? "rgba(245, 213, 71, 0.16)" : "rgba(53, 224, 143, 0.14)",
+                          color: critical ? "#FFFFFF" : attention ? "var(--vital-rr)" : "var(--vital-hr)",
+                        }}
+                      >
                         {critical ? "Crítico" : attention ? "Atenção" : "Estável"}
                       </span>
                     </div>
                   </button>
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
-                    <span className="inline-flex items-center gap-1.5 text-[10px] font-medium" style={{ color: record.connected ? "var(--accent)" : "var(--alert-foreground)" }}>
-                      <span className="h-2 w-2 rounded-full bg-current" />
+                  <div className="mt-2.5 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-medium" style={{ color: record.connected ? "var(--vital-hr)" : "var(--vital-alarm)" }}>
+                      <span className={"h-2 w-2 rounded-full bg-current" + (record.connected ? " animate-pulse" : "")} />
                       {record.deviceName} · {record.connected ? "Conectado" : "Desconectado"}
                     </span>
-                    <span className="text-[10px]" style={{ color: "var(--muted-foreground)" }}>{record.deviceId} · {record.time}</span>
+                    <span className="font-mono text-[11px] tabular-nums" style={{ color: "var(--monitor-muted)" }}>{record.deviceId} · {record.time}</span>
                   </div>
                   <div className="mt-3 grid grid-cols-2 gap-2">
-                    <Metric label="Frequência cardíaca" value={String(record.heartRate)} unit="bpm" />
-                    <Metric label="Saturação" value={record.oxygen.toFixed(1)} unit="%" />
-                    <Metric label="Frequência respiratória" value={String(record.respiration)} unit="rpm" />
-                    <Metric label="Temperatura" value={record.temperature.toFixed(1)} unit="°C" />
+                    <Metric label="Frequência cardíaca" short="FC" value={String(record.heartRate)} unit="bpm" color="var(--vital-hr)" alarm={record.heartRate < thresholds.heartRateMin || record.heartRate > thresholds.heartRateMax} offline={!record.connected} />
+                    <Metric label="Saturação" short="SpO₂" value={record.oxygen.toFixed(1)} unit="%" color="var(--vital-spo2)" alarm={record.oxygen < thresholds.oxygenMin} offline={!record.connected} />
+                    <Metric label="Frequência respiratória" short="FR" value={String(record.respiration)} unit="rpm" color="var(--vital-rr)" alarm={record.respiration > thresholds.respirationMax} offline={!record.connected} />
+                    <Metric label="Temperatura" short="TEMP" value={record.temperature.toFixed(1)} unit="°C" color="var(--vital-temp)" alarm={record.temperature >= thresholds.temperatureMax} offline={!record.connected} />
+                    <div className="monitor-tile col-span-2 flex items-center justify-between gap-3 rounded-lg px-3 py-2">
+                      <p className="text-[11px] font-bold tracking-wide" style={{ color: "var(--vital-bp)" }}>PA <span className="font-medium" style={{ color: "var(--monitor-muted)" }}>· último registro</span></p>
+                      <p className="monitor-value text-xl" style={{ color: "var(--vital-bp)" }} aria-label={"Pressão arterial do último registro: " + (record.bloodPressure ?? "sem registro") + " mmHg"}>
+                        {record.bloodPressure ?? "--/--"}<span className="ml-1 text-[11px] font-medium" style={{ color: "var(--monitor-muted)" }}>mmHg</span>
+                      </p>
+                    </div>
                   </div>
-                  <button type="button" onClick={() => setDeviceConnection(record.id, !record.connected)} className="mt-3 min-h-10 w-full rounded-lg px-3 text-xs font-semibold" style={{ background: "var(--secondary)", color: "var(--primary)" }}>
+                  <button type="button" onClick={() => setDeviceConnection(record.id, !record.connected)} className="mt-3 min-h-10 w-full rounded-lg border px-3 text-xs font-semibold transition-colors hover:bg-white/5" style={{ borderColor: "var(--monitor-border)", color: "var(--monitor-text)" }}>
                     Simular {record.connected ? "desconexão" : "reconexão"} do dispositivo
                   </button>
                 </article>
               )
             })}
             {filteredRecords.length === 0 && (
-              <div className="rounded-[var(--radius)] border p-8 text-center text-sm md:col-span-2" style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--muted-foreground)" }}>
+              <div className="rounded-[var(--radius)] border border-dashed p-10 text-center text-sm md:col-span-2" style={{ borderColor: "var(--border-strong)", color: "var(--muted-foreground)" }}>
                 Nenhum paciente encontrado para esse filtro.
               </div>
             )}
@@ -667,41 +700,55 @@ export default function VitalMonitoring({ patients, profile, storageKey, acknowl
           <aside className="monitoring-printable min-w-0 rounded-[var(--radius)] border p-4 sm:p-5" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0">
-                <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "var(--muted-foreground)" }}>Histórico recente</p>
+                <p className="ui-eyebrow">Paciente selecionado</p>
                 <h2 className="mt-1 truncate text-lg font-bold" style={{ color: "var(--foreground)" }}>{selected.name}</h2>
                 <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>{selected.condition}</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <button type="button" onClick={printReport} className="rounded-lg px-2.5 py-1.5 text-[10px] font-semibold" style={{ background: "var(--secondary)", color: "var(--primary)" }}>Salvar em PDF</button>
-                <button type="button" onClick={exportHistory} className="rounded-lg px-2.5 py-1.5 text-[10px] font-semibold" style={{ background: "var(--secondary)", color: "var(--primary)" }}>Exportar CSV</button>
-                <span className="rounded-lg px-2.5 py-1.5 text-[10px] font-semibold" style={{ background: "var(--secondary)", color: "var(--primary)" }}>Leito {selected.bed}</span>
+                <span className="rounded-lg border px-2.5 py-1.5 text-xs font-semibold" style={{ borderColor: "var(--border)", color: "var(--foreground)" }}>Leito {selected.bed}</span>
+                <button type="button" onClick={printReport} className="min-h-9 rounded-lg px-3 text-xs font-semibold" style={{ background: "var(--secondary)", color: "var(--primary)" }}>Salvar em PDF</button>
+                <button type="button" onClick={exportHistory} className="min-h-9 rounded-lg px-3 text-xs font-semibold" style={{ background: "var(--secondary)", color: "var(--primary)" }}>Exportar CSV</button>
               </div>
             </div>
-            <div className="mt-5 rounded-xl border p-3" style={{ background: "var(--background)", borderColor: "var(--border)" }}>
-              <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px]" style={{ color: "var(--muted-foreground)" }}>
-                <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-full" style={{ background: "var(--primary)" }} />Frequência cardíaca</span>
-                <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-full" style={{ background: "var(--accent)" }} />Saturação</span>
-              </div>
-              <svg viewBox="0 0 300 60" className="h-28 w-full" role="img" aria-label="Gráfico ilustrativo das últimas medições">
-                <path d="M8 15H292M8 30H292M8 45H292" stroke="var(--border)" strokeDasharray="3 4" />
-                <polyline points={points(selected.history.map((sample) => sample.heartRate), 45, 125)} fill="none" stroke="var(--primary)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                <polyline points={points(selected.history.map((sample) => sample.oxygen), 80, 100)} fill="none" stroke="var(--accent)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              <p className="mt-1 text-[10px]" style={{ color: "var(--muted-foreground)" }}>Série demonstrativa · atualização a cada 5 segundos · retenção local de até 1 hora</p>
-            </div>
-            <div className="mt-3 rounded-xl border p-3" style={{ background: "var(--background)", borderColor: "var(--border)" }}>
+            <div className="monitor-screen mt-4 rounded-xl p-3.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-xs font-bold" style={{ color: "var(--foreground)" }}>Traçado ECG demonstrativo</h3>
-                <span className="text-[10px]" aria-live="polite" style={{ color: selected.ecgAbnormal ? "var(--alert-foreground)" : "var(--muted-foreground)" }}>{selected.ecgAbnormal ? "Alteração simulada" : "Ritmo regular simulado"} · Ilustrativo</span>
+                <h3 className="text-[11px] font-bold uppercase tracking-[0.12em]" style={{ color: "var(--vital-hr)" }}>ECG · II</h3>
+                <span className="text-[11px] font-medium" aria-live="polite" style={{ color: selected.ecgAbnormal ? "var(--vital-alarm)" : "var(--monitor-muted)" }}>{selected.ecgAbnormal ? "Alteração simulada" : "Ritmo regular simulado"} · Ilustrativo</span>
               </div>
               <svg viewBox="0 0 320 56" className="mt-2 h-16 w-full" role="img" aria-label="Animação ilustrativa de um traçado de eletrocardiograma">
-                <path d="M0 28H40l8-2 6 2h25l8-4 5 8 7-24 8 39 8-19 6 2h33l8-2 6 2h24l8-4 5 8 7-24 8 39 8-19 6 2h33l8-2 6 2h27" className="ecg-trace" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinejoin="round" />
+                <path d="M0 28H40l8-2 6 2h25l8-4 5 8 7-24 8 39 8-19 6 2h33l8-2 6 2h24l8-4 5 8 7-24 8 39 8-19 6 2h33l8-2 6 2h27" className="ecg-trace monitor-trace" fill="none" stroke={selected.ecgAbnormal ? "var(--vital-alarm)" : "var(--vital-hr)"} strokeWidth="2" strokeLinejoin="round" />
               </svg>
+              <div className="mt-3 grid grid-cols-2 gap-x-2 gap-y-3 min-[420px]:grid-cols-3">
+                {[
+                  { short: "FC", value: String(selected.heartRate), unit: "bpm", color: "var(--vital-hr)", live: true },
+                  { short: "SpO₂", value: selected.oxygen.toFixed(1), unit: "%", color: "var(--vital-spo2)", live: true },
+                  { short: "FR", value: String(selected.respiration), unit: "rpm", color: "var(--vital-rr)", live: true },
+                  { short: "TEMP", value: selected.temperature.toFixed(1), unit: "°C", color: "var(--vital-temp)", live: true },
+                  { short: "PA", value: selected.bloodPressure ?? "--/--", unit: "mmHg · registro", color: "var(--vital-bp)", live: false },
+                ].map((vital) => (
+                  <div key={vital.short} className="min-w-0">
+                    <p className="truncate text-[11px] font-bold" style={{ color: vital.color }}>{vital.short} <span className="font-medium" style={{ color: "var(--monitor-muted)" }}>{vital.unit}</span></p>
+                    <p className="monitor-value mt-1 text-[1.65rem]" style={{ color: selected.connected || !vital.live ? vital.color : "var(--monitor-muted)" }}>{selected.connected || !vital.live ? vital.value : "--"}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="monitor-screen mt-3 rounded-xl p-3.5">
+              <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-medium" style={{ color: "var(--monitor-muted)" }}>
+                <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-full" style={{ background: "var(--vital-hr)" }} />Frequência cardíaca</span>
+                <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-full" style={{ background: "var(--vital-spo2)" }} />Saturação</span>
+              </div>
+              <svg viewBox="0 0 300 60" className="h-28 w-full" role="img" aria-label="Gráfico ilustrativo das últimas medições">
+                <path d="M8 15H292M8 30H292M8 45H292" stroke="var(--monitor-border)" strokeDasharray="3 4" />
+                <polyline className="monitor-trace" points={points(selected.history.map((sample) => sample.heartRate), 45, 125)} fill="none" stroke="var(--vital-hr)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                <polyline className="monitor-trace" points={points(selected.history.map((sample) => sample.oxygen), 80, 100)} fill="none" stroke="var(--vital-spo2)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <p className="mt-1 text-[11px]" style={{ color: "var(--monitor-muted)" }}>Série demonstrativa · atualização a cada 5 segundos · retenção local de até 1 hora</p>
             </div>
             <div className="mt-3 rounded-xl border p-3" role={selectedEvents.length ? "alert" : undefined} style={{ background: selectedEvents.length ? "var(--alert-surface)" : "var(--background)", borderColor: selectedEvents.length ? "var(--alert-border)" : "var(--border)" }}>
               <h3 className="text-xs font-bold" style={{ color: "var(--foreground)" }}>Verificação demonstrativa de limites</h3>
               {selectedEvents.length ? (
-                <ul className="mt-2 space-y-2 text-[10px]" style={{ color: "var(--alert-foreground)" }}>
+                <ul className="mt-2 space-y-2 text-xs" style={{ color: "var(--alert-foreground)" }}>
                   {selectedEvents.map((event) => {
                     const key = selected.id + ":" + event.id
                     const acknowledged = acknowledgedAlerts.includes(key)
@@ -727,37 +774,37 @@ export default function VitalMonitoring({ patients, profile, storageKey, acknowl
                   <li className="pt-1 font-semibold">Nível visual: {isCritical(selected) ? "Crítico" : "Moderado"}</li>
                 </ul>
               ) : (
-                <p className="mt-1 text-[10px]" style={{ color: "var(--muted-foreground)" }}>Nenhum limite configurado foi ultrapassado nesta simulação.</p>
+                <p className="mt-1 text-xs" style={{ color: "var(--muted-foreground)" }}>Nenhum limite configurado foi ultrapassado nesta simulação.</p>
               )}
             </div>
             <details className="mt-3 rounded-xl border p-3" style={{ background: "var(--background)", borderColor: "var(--border)" }}>
-              <summary className="cursor-pointer text-xs font-bold" style={{ color: "var(--foreground)" }}>
+              <summary className="monitor-summary -m-3 flex min-h-11 cursor-pointer items-center rounded-xl p-3 text-xs font-bold" style={{ color: "var(--foreground)" }}>
                 Histórico de ocorrências ({occurrences.length})
               </summary>
               <div className="mt-3 max-h-64 space-y-2 overflow-y-auto pr-1">
                 {occurrences.length ? [...occurrences].reverse().slice(0, 30).map((occurrence) => (
-                  <article key={occurrence.id} className="rounded-lg border p-3 text-[10px]" style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--muted-foreground)" }}>
+                  <article key={occurrence.id} className="rounded-lg border p-3 text-[11px] leading-relaxed" style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--muted-foreground)" }}>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <strong style={{ color: "var(--foreground)" }}>{occurrence.patientName} · {occurrence.label}</strong>
-                      <span className="font-semibold" style={{ color: occurrence.severity === "Crítico" ? "var(--alert-foreground)" : "var(--primary)" }}>{occurrence.severity} · {occurrence.resolvedAt ? "Resolvido" : "Ativo"}</span>
+                      <span className="font-semibold" style={{ color: occurrence.severity === "Crítico" ? "var(--danger-foreground)" : occurrence.severity === "Moderado" ? "var(--warning-foreground)" : "var(--primary)" }}>{occurrence.severity} · {occurrence.resolvedAt ? "Resolvido" : "Ativo"}</span>
                     </div>
                     <p className="mt-1">{occurrence.value} · Limite: {occurrence.limit}</p>
                     {(occurrence.patientId || occurrence.bed || occurrence.sector) && <p>{occurrence.patientId ? occurrence.patientId + " · " : ""}{occurrence.bed ? "Leito " + occurrence.bed + " · " : ""}{occurrence.sector ?? ""}</p>}
                     <p>Início: {occurrence.startedAt}{occurrence.resolvedAt ? " · Resolução: " + occurrence.resolvedAt : ""}</p>
                     <p>Atendimento: {occurrence.acknowledged ? "Reconhecido" : "Pendente"}</p>
                   </article>
-                )) : <p className="text-[10px]" style={{ color: "var(--muted-foreground)" }}>As ocorrências detectadas durante a simulação aparecerão aqui.</p>}
+                )) : <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>As ocorrências detectadas durante a simulação aparecerão aqui.</p>}
               </div>
             </details>
             <div className="mt-4">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-xs font-bold" style={{ color: "var(--foreground)" }}>Histórico recente · até 1 hora</h3>
-                {selected.history.length > 6 && <button type="button" onClick={() => setShowAllHistory((value) => !value)} className="text-[10px] font-semibold" style={{ color: "var(--primary)" }}>{showAllHistory ? "Mostrar menos" : "Ver todas as medições"}</button>}
+                {selected.history.length > 6 && <button type="button" onClick={() => setShowAllHistory((value) => !value)} className="min-h-8 text-xs font-semibold" style={{ color: "var(--primary)" }}>{showAllHistory ? "Mostrar menos" : "Ver todas as medições"}</button>}
               </div>
               <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
                 {[...selected.history].reverse().slice(0, showAllHistory ? 720 : 6).map((sample, index) => (
-                  <div key={sample.time + "-" + index} className="grid grid-cols-[1fr_auto] gap-2 rounded-lg px-3 py-2 text-[10px]" style={{ background: "var(--background)" }}>
-                    <span style={{ color: "var(--muted-foreground)" }}>{sample.time}</span>
+                  <div key={sample.time + "-" + index} className="grid grid-cols-[auto_1fr] gap-3 rounded-lg px-3 py-2 text-xs" style={{ background: "var(--background)" }}>
+                    <span className="font-mono tabular-nums" style={{ color: "var(--muted-foreground)" }}>{sample.time}</span>
                     <span className="text-right font-medium tabular-nums" style={{ color: "var(--foreground)" }}>
                       {sample.heartRate} bpm · {sample.oxygen.toFixed(1)}% · {sample.respiration} rpm · {sample.temperature.toFixed(1)}°C
                     </span>
@@ -766,7 +813,7 @@ export default function VitalMonitoring({ patients, profile, storageKey, acknowl
               </div>
             </div>
             <details className="mt-4 rounded-xl border p-3" style={{ background: "var(--background)", borderColor: "var(--border)" }}>
-              <summary className="cursor-pointer text-xs font-bold" style={{ color: "var(--foreground)" }}>Configurar limites demonstrativos</summary>
+              <summary className="monitor-summary -m-3 flex min-h-11 cursor-pointer items-center rounded-xl p-3 text-xs font-bold" style={{ color: "var(--foreground)" }}>Configurar limites demonstrativos</summary>
               <div className="mt-3 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
                 {[
                   { key: "heartRateMin", label: "FC mínima (bpm)" },
@@ -775,7 +822,7 @@ export default function VitalMonitoring({ patients, profile, storageKey, acknowl
                   { key: "respirationMax", label: "FR máxima (rpm)" },
                   { key: "temperatureMax", label: "Temperatura máxima (°C)" },
                 ].map((field) => (
-                  <label key={field.key} className="flex min-w-0 flex-col gap-1 text-[10px]" style={{ color: "var(--muted-foreground)" }}>
+                  <label key={field.key} className="flex min-w-0 flex-col gap-1 text-xs font-medium" style={{ color: "var(--muted-foreground)" }}>
                     {field.label}
                     <input type="number" step={field.key === "temperatureMax" || field.key === "oxygenMin" ? "0.1" : "1"} value={thresholds[field.key as keyof Thresholds]} onChange={(event) => updateThreshold(field.key as keyof Thresholds, event.target.value)} className="min-h-10 min-w-0 rounded-lg border px-2 text-sm" style={controlStyle} />
                   </label>
@@ -784,13 +831,13 @@ export default function VitalMonitoring({ patients, profile, storageKey, acknowl
                   Restaurar limites de exemplo
                 </button>
               </div>
-              <p className="mt-2 text-[10px]" style={{ color: "var(--muted-foreground)" }}>Os limites são exemplos de interface e precisam ser definidos por protocolos clínicos antes de qualquer uso real.</p>
+              <p className="mt-2 text-xs" style={{ color: "var(--muted-foreground)" }}>Os limites são exemplos de interface e precisam ser definidos por protocolos clínicos antes de qualquer uso real.</p>
             </details>
           </aside>
         )}
       </div>
 
-      <p className="rounded-lg border px-3 py-2 text-[10px] leading-relaxed" style={{ background: "var(--alert-surface)", borderColor: "var(--alert-border)", color: "var(--muted-foreground)" }}>
+      <p className="rounded-lg border px-3 py-2.5 text-xs leading-relaxed" style={{ background: "var(--warning-surface)", borderColor: "color-mix(in srgb, var(--warning) 35%, transparent)", color: "var(--warning-foreground)" }}>
         Demonstração: medições, alertas e conexões são simulados no navegador e não devem ser usados para decisões clínicas.
       </p>
     </section>

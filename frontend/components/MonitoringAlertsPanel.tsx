@@ -10,6 +10,12 @@ interface Props {
   onOpenMonitoring: () => void
 }
 
+const severityTone = {
+  Crítico: { surface: "var(--danger-surface)", text: "var(--danger-foreground)", bar: "var(--danger)" },
+  Moderado: { surface: "var(--warning-surface)", text: "var(--warning-foreground)", bar: "var(--warning)" },
+  Informativo: { surface: "var(--secondary)", text: "var(--control-foreground)", bar: "var(--info)" },
+}
+
 export default function MonitoringAlertsPanel({ alerts, profile, acknowledgedKeys, setAcknowledgedKeys, onOpenMonitoring }: Props) {
   const pendingCount = alerts.filter((alert) => !acknowledgedKeys.includes(alert.key)).length
 
@@ -32,16 +38,17 @@ export default function MonitoringAlertsPanel({ alerts, profile, acknowledgedKey
           {alerts.map((alert) => {
             const acknowledged = acknowledgedKeys.includes(alert.key)
             return (
-              <article key={alert.key} className="min-w-0 rounded-xl border p-4" style={{ background: "var(--background)", borderColor: alert.severity === "Crítico" ? "var(--alert-border)" : "var(--border)" }}>
+              <article key={alert.key} className="relative min-w-0 overflow-hidden rounded-xl border p-4 pl-5" style={{ background: "var(--background)", borderColor: "var(--border)", opacity: acknowledged ? 0.75 : 1 }}>
+                <span className="absolute inset-y-0 left-0 w-1" style={{ background: severityTone[alert.severity].bar }} aria-hidden="true" />
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="rounded-full px-2.5 py-1 text-[10px] font-bold" style={{ background: alert.severity === "Crítico" ? "var(--alert-icon-bg)" : "var(--secondary)", color: alert.severity === "Crítico" ? "var(--alert-foreground)" : alert.severity === "Informativo" ? "var(--muted-foreground)" : "var(--primary)" }}>
+                  <span className="rounded-full px-2.5 py-1 text-[11px] font-bold" style={{ background: severityTone[alert.severity].surface, color: severityTone[alert.severity].text }}>
                     {alert.severity}
                   </span>
-                  <span className="text-[10px]" style={{ color: "var(--muted-foreground)" }}>{acknowledged ? "Reconhecido" : "Pendente"} · {alert.time}</span>
+                  <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>{acknowledged ? "Reconhecido" : "Pendente"} · {alert.time}</span>
                 </div>
                 <h3 className="mt-3 text-sm font-semibold" style={{ color: "var(--foreground)" }}>{alert.label}</h3>
                 <p className="mt-1 text-xs" style={{ color: "var(--muted-foreground)" }}>{alert.patientName} · Leito {alert.bed} · {alert.sector}</p>
-                <p className="mt-2 text-xs font-medium" style={{ color: alert.severity === "Informativo" ? "var(--primary)" : "var(--alert-foreground)" }}>{alert.value} · Limite: {alert.limit}</p>
+                <p className="mt-2 text-xs font-medium" style={{ color: severityTone[alert.severity].text }}>{alert.value} · Limite: {alert.limit}</p>
                 {!acknowledged && (
                   <button type="button" onClick={() => {
                     setAcknowledgedKeys((current) => current.includes(alert.key) ? current : [...current, alert.key])
@@ -55,7 +62,7 @@ export default function MonitoringAlertsPanel({ alerts, profile, acknowledgedKey
           })}
         </div>
       ) : (
-        <p className="mt-4 rounded-lg border border-dashed p-4 text-xs" style={{ borderColor: "var(--border)", color: "var(--muted-foreground)" }}>
+        <p className="mt-4 rounded-lg border border-dashed p-6 text-center text-xs" style={{ borderColor: "var(--border)", color: "var(--muted-foreground)" }}>
           Os alertas simulados ativos aparecerão aqui assim que o monitoramento for aberto. Os dados desta área são demonstrativos.
         </p>
       )}

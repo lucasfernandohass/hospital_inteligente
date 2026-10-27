@@ -2,6 +2,7 @@ import { useMemo, useState } from "react"
 import type { Dispatch, SetStateAction } from "react"
 import type { Professional, ProfessionalRole } from "./professionalStore"
 import { logActivity } from "./activityStore"
+import { PageTitle, UiIcon } from "./ui"
 
 interface Props {
   professionals: Professional[]
@@ -67,18 +68,21 @@ export default function StaffManagement({ professionals, setProfessionals }: Pro
 
   return (
     <section className="fade-in min-w-0 space-y-5" aria-labelledby="equipe-title">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 id="equipe-title" className="text-2xl font-bold sm:text-3xl" style={{ color: "var(--foreground)" }}>Equipe e profissionais</h1>
-          <p className="mt-1 text-sm" style={{ color: "var(--muted-foreground)" }}>Cadastro demonstrativo da equipe hospitalar.</p>
-        </div>
-        <button type="button" onClick={() => { setShowForm((value) => !value); setError("") }} className="min-h-11 rounded-xl px-4 text-sm font-semibold" style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}>
-          {showForm ? "Fechar cadastro" : "Cadastrar profissional"}
-        </button>
+      <div id="equipe-title">
+        <PageTitle
+          eyebrow="Recursos humanos"
+          title="Equipe e profissionais"
+          subtitle="Cadastro demonstrativo da equipe hospitalar."
+          action={
+            <button type="button" onClick={() => { setShowForm((value) => !value); setError("") }} className="min-h-11 rounded-xl px-4 text-sm font-semibold" style={{ background: showForm ? "var(--secondary)" : "var(--primary)", color: showForm ? "var(--control-foreground)" : "var(--primary-foreground)" }}>
+              {showForm ? "Fechar cadastro" : "+ Cadastrar profissional"}
+            </button>
+          }
+        />
       </div>
 
       {showForm && (
-        <form onSubmit={submit} className="grid grid-cols-1 gap-4 rounded-[var(--radius)] border p-4 sm:grid-cols-2 xl:grid-cols-3" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
+        <form onSubmit={submit} className="slide-up grid grid-cols-1 gap-4 rounded-[var(--radius)] border p-5 sm:grid-cols-2 xl:grid-cols-3" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
           <label className="flex min-w-0 flex-col gap-1.5 text-xs font-medium" style={{ color: "var(--muted-foreground)" }}>
             Nome completo
             <input required minLength={3} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} className={inputClass} style={controlStyle} />
@@ -111,15 +115,15 @@ export default function StaffManagement({ professionals, setProfessionals }: Pro
         </form>
       )}
 
-      <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-3">
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
         {[
-          { label: "Profissionais cadastrados", value: professionals.length },
-          { label: "Ativos", value: professionals.filter((professional) => professional.active).length },
-          { label: "Inativos", value: professionals.filter((professional) => !professional.active).length },
+          { label: "Profissionais cadastrados", value: professionals.length, color: "var(--foreground)", dot: "var(--info)" },
+          { label: "Ativos", value: professionals.filter((professional) => professional.active).length, color: "var(--success-foreground)", dot: "var(--success)" },
+          { label: "Inativos", value: professionals.filter((professional) => !professional.active).length, color: "var(--neutral-foreground)", dot: "var(--neutral)" },
         ].map((item) => (
           <div key={item.label} className="rounded-[var(--radius)] border p-4" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
-            <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>{item.label}</p>
-            <p className="mt-2 text-2xl font-bold" style={{ color: "var(--primary)" }}>{item.value}</p>
+            <p className="flex items-center gap-2 text-xs font-medium leading-tight" style={{ color: "var(--muted-foreground)" }}><span className="h-2 w-2 shrink-0 rounded-full" style={{ background: item.dot }} />{item.label}</p>
+            <p className="mt-1.5 text-2xl font-bold tabular-nums" style={{ color: item.color }}>{item.value}</p>
           </div>
         ))}
       </div>
@@ -138,11 +142,14 @@ export default function StaffManagement({ professionals, setProfessionals }: Pro
         {visibleProfessionals.map((professional) => (
           <article key={professional.id} className="min-w-0 rounded-[var(--radius)] border p-4" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
             <div className="flex min-w-0 items-start justify-between gap-3">
-              <div className="min-w-0">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-bold" style={{ background: "var(--secondary)", color: "var(--control-foreground)" }} aria-hidden="true">
+                {professional.name.split(" ").filter(Boolean).map((part) => part[0]).slice(0, 2).join("").toUpperCase()}
+              </span>
+              <div className="min-w-0 flex-1">
                 <h2 className="truncate text-sm font-bold" style={{ color: "var(--foreground)" }}>{professional.name}</h2>
                 <p className="mt-1 truncate text-xs" style={{ color: "var(--muted-foreground)" }}>{professional.email}</p>
               </div>
-              <span className="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold" style={{ background: professional.active ? "var(--secondary)" : "var(--alert-icon-bg)", color: professional.active ? "var(--primary)" : "var(--alert-foreground)" }}>
+              <span className="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold" style={{ background: professional.active ? "var(--success-surface)" : "var(--neutral-surface)", color: professional.active ? "var(--success-foreground)" : "var(--neutral-foreground)" }}>
                 {professional.active ? "Ativo" : "Inativo"}
               </span>
             </div>
@@ -157,13 +164,14 @@ export default function StaffManagement({ professionals, setProfessionals }: Pro
           </article>
         ))}
         {visibleProfessionals.length === 0 && (
-          <div className="rounded-[var(--radius)] border p-8 text-center text-sm md:col-span-2 xl:col-span-3" style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--muted-foreground)" }}>
+          <div className="flex flex-col items-center gap-2 rounded-[var(--radius)] border border-dashed p-10 text-center text-sm md:col-span-2 xl:col-span-3" style={{ borderColor: "var(--border-strong)", color: "var(--muted-foreground)" }}>
+            <UiIcon name="search" size={22} />
             Nenhum profissional encontrado.
           </div>
         )}
       </div>
 
-      <p className="rounded-lg border px-3 py-2 text-[10px]" style={{ background: "var(--alert-surface)", borderColor: "var(--alert-border)", color: "var(--muted-foreground)" }}>
+      <p className="rounded-lg border px-3 py-2.5 text-xs" style={{ background: "var(--secondary)", borderColor: "var(--border)", color: "var(--muted-foreground)" }}>
         Os dados são simulados e armazenados localmente. Esta tela não gerencia permissões nem autenticação reais.
       </p>
     </section>

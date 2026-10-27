@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react"
 import type { Screen } from "../App"
 import DashboardSidebar from "./DashboardSidebar"
-import ThemeToggle, { type Theme } from "./ThemeToggle"
+import { Avatar, ShowMoreButton, summaryLimit, DashboardHeader, EmptyState, HeroHeader, HeroStat, MetaItem, PageTitle, ProgressBar, QuickAction, SectionCard, SectionContext, StatusBadge, TimelineItem, UiIcon, VitalTile, shiftLabel, toneStyles, type Tone } from "./ui"
+import { greeting } from "./dateUtils"
+import type { Theme } from "./ThemeToggle"
 import VitalMonitoring from "./VitalMonitoring"
 import MonitoringAlertsPanel from "./MonitoringAlertsPanel"
 import ActivityLog from "./ActivityLog"
@@ -25,7 +27,6 @@ interface Props {
 
 type Tab = "internados" | "monitoramento" | "prescricao" | "administracao" | "evolucao" | "atividades" | "alertas"
 
-type IconName = "users" | "clipboard" | "flask" | "bed" | "bell" | "alert" | "activity" | "image" | "ecg" | "chevron" | "arrow" | "search" | "check" | "x" | "pill" | "clock" | "send"
 
 // ---------------------------------------------------------------------------
 // Perfil fixo da enfermeira responsável
@@ -468,165 +469,28 @@ const prescricoesPorPaciente: Record<string, PrescricaoItem[]> = {
 }
 
 const riskColor = {
-  low: { bg: "#E8F8F5", text: "#007F72", dot: "#00A896", label: "Estável" },
-  medium: { bg: "#FFF8E6", text: "#A96800", dot: "#F5A623", label: "Atenção" },
-  high: { bg: "#FDEDEC", text: "#B8322A", dot: "#E74C3C", label: "Crítico" },
-}
-
-const Icon = ({
-  name,
-  size = 18,
-  strokeWidth = 1.8,
-}: {
-  name: IconName
-  size?: number
-  strokeWidth?: number
-}) => {
-  const common = {
-    width: size,
-    height: size,
-    viewBox: "0 0 24 24",
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth,
-    strokeLinecap: "round" as const,
-    strokeLinejoin: "round" as const,
-  }
-  switch (name) {
-    case "users":
-      return (
-        <svg {...common}>
-          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-          <circle cx="9" cy="7" r="4" />
-          <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
-        </svg>
-      )
-    case "clipboard":
-      return (
-        <svg {...common}>
-          <rect x="5" y="4" width="14" height="17" rx="2" />
-          <path d="M9 4.5V3h6v1.5M9 10h6M9 14h6M9 18h3" />
-        </svg>
-      )
-    case "flask":
-      return (
-        <svg {...common}>
-          <path d="M9 3h6M10 3v6l-5.5 9.2A2 2 0 0 0 6.2 21h11.6a2 2 0 0 0 1.7-2.8L14 9V3" />
-          <path d="M8 15h8" />
-        </svg>
-      )
-    case "bed":
-      return (
-        <svg {...common}>
-          <path d="M3 18v-6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v6M3 15h18M6 10V7a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3M3 18v2M21 18v2" />
-        </svg>
-      )
-    case "bell":
-      return (
-        <svg {...common}>
-          <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-          <path d="M13.7 21a2 2 0 0 1-3.4 0" />
-        </svg>
-      )
-    case "alert":
-      return (
-        <svg {...common}>
-          <path d="M10.3 3.6 2.4 17a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z" />
-          <path d="M12 9v4M12 17h.01" />
-        </svg>
-      )
-    case "activity":
-      return (
-        <svg {...common}>
-          <path d="M3 12h4l2-6 4 12 2-6h6" />
-        </svg>
-      )
-    case "image":
-      return (
-        <svg {...common}>
-          <rect x="3" y="4" width="18" height="16" rx="2" />
-          <circle cx="8.5" cy="9" r="1.5" />
-          <path d="m21 15-5-5L5 20" />
-        </svg>
-      )
-    case "ecg":
-      return (
-        <svg {...common}>
-          <path d="M3 12h4l2-7 4 14 2-7h6" />
-        </svg>
-      )
-    case "chevron":
-      return (
-        <svg {...common}>
-          <path d="m6 9 6 6 6-6" />
-        </svg>
-      )
-    case "arrow":
-      return (
-        <svg {...common}>
-          <path d="M5 12h14M13 6l6 6-6 6" />
-        </svg>
-      )
-    case "search":
-      return (
-        <svg {...common}>
-          <circle cx="11" cy="11" r="7" />
-          <path d="m20 20-4-4" />
-        </svg>
-      )
-    case "check":
-      return (
-        <svg {...common}>
-          <path d="m5 12 4 4L19 6" />
-        </svg>
-      )
-    case "x":
-      return (
-        <svg {...common}>
-          <path d="m6 6 12 12M18 6 6 18" />
-        </svg>
-      )
-    case "pill":
-      return (
-        <svg {...common}>
-          <rect x="3" y="9" width="18" height="7" rx="3.5" />
-          <path d="M12 9v7" />
-        </svg>
-      )
-    case "clock":
-      return (
-        <svg {...common}>
-          <circle cx="12" cy="12" r="9" />
-          <path d="M12 7v5l3 2" />
-        </svg>
-      )
-    case "send":
-      return (
-        <svg {...common}>
-          <path d="m22 2-7 20-4-9-9-4Z" />
-          <path d="M22 2 11 13" />
-        </svg>
-      )
-  }
+  low: { bg: "var(--success-surface)", text: "var(--success-foreground)", dot: "var(--success)", label: "Estável" },
+  medium: { bg: "var(--warning-surface)", text: "var(--warning-foreground)", dot: "var(--warning)", label: "Atenção" },
+  high: { bg: "var(--danger-surface)", text: "var(--danger-foreground)", dot: "var(--danger)", label: "Crítico" },
 }
 
 const statusPrescricaoColor = {
   pendente: {
-    bg: "#FFF8E6",
-    text: "#A96800",
-    dot: "#F5A623",
+    bg: "var(--warning-surface)",
+    text: "var(--warning-foreground)",
+    dot: "var(--warning)",
     label: "Pendente",
   },
   administrado: {
-    bg: "#E8F8F5",
-    text: "#007F72",
-    dot: "#00A896",
+    bg: "var(--success-surface)",
+    text: "var(--success-foreground)",
+    dot: "var(--success)",
     label: "Administrado",
   },
   atrasado: {
-    bg: "#FDEDEC",
-    text: "#B8322A",
-    dot: "#E74C3C",
+    bg: "var(--danger-surface)",
+    text: "var(--danger-foreground)",
+    dot: "var(--danger)",
     label: "Atrasado",
   },
 }
@@ -717,6 +581,9 @@ export default function NurseDashboard({
   const [prescricoesCompartilhadas] = useLocalStorageState<SharedPrescription[]>(PRESCRIPTION_STORAGE_KEY, [])
   const [evolucaoTexto, setEvolucaoTexto] = useState("")
   const [evolucaoEnviada, setEvolucaoEnviada] = useState(false)
+  // Listas resumidas no celular (central do plantão)
+  const [listasExpandidas, setListasExpandidas] = useState<Record<string, boolean>>({})
+  const alternarLista = (key: string) => setListasExpandidas((current) => ({ ...current, [key]: !current[key] }))
 
   const [evolucoesPorPaciente, setEvolucoesPorPaciente] =
     useLocalStorageState<ClinicalEvolutionMap>(CLINICAL_EVOLUTION_STORAGE_KEY, () => readLegacyClinicalEvolutions(registrosClinicosIniciais))
@@ -807,186 +674,106 @@ export default function NurseDashboard({
     setTimeout(() => setEvolucaoEnviada(false), 2500)
   }
 
-  const tabs: { key: Tab; label: string }[] = [
-    { key: "internados", label: "Pacientes Internados" },
-    { key: "monitoramento", label: "Monitoramento" },
-    { key: "prescricao", label: "Prescrições" },
-    { key: "administracao", label: "Administração" },
-    { key: "evolucao", label: "Evolução Clínica" },
-    { key: "atividades", label: "Registro de Atividades" },
-    { key: "alertas", label: "Alertas" },
+  // Navegação agrupada por assunto
+  const tabs: { key: Tab; label: string; group: string }[] = [
+    { key: "internados", label: "Pacientes Internados", group: "Plantão" },
+    { key: "monitoramento", label: "Monitoramento", group: "Plantão" },
+    { key: "alertas", label: "Alertas", group: "Plantão" },
+    { key: "prescricao", label: "Prescrições", group: "Cuidados" },
+    { key: "administracao", label: "Administração", group: "Cuidados" },
+    { key: "evolucao", label: "Evolução Clínica", group: "Cuidados" },
+    { key: "atividades", label: "Registro de Atividades", group: "Registros" },
   ]
+  const activeTabInfo = tabs.find((tab) => tab.key === activeTab)
 
-  const PageTitle = ({
-    title,
-    subtitle,
-    action,
-  }: {
-    title: string
-    subtitle: string
-    action?: React.ReactNode
-  }) => (
-    <div className="flex flex-col items-stretch justify-between gap-3 mb-6 sm:flex-row sm:items-start sm:gap-4">
-      <div>
-        <h1
-          className="text-2xl md:text-3xl font-semibold tracking-tight"
-          style={{ color: "var(--foreground)" }}
-        >
-          {title}
-        </h1>
-        <p
-          className="text-sm mt-1"
-          style={{ color: "var(--muted-foreground)" }}
-        >
-          {subtitle}
-        </p>
+  // ---- Apresentação (somente leitura dos dados já calculados acima) ----
+  const riskTone = (risk: string): Tone => (risk === "high" ? "danger" : risk === "medium" ? "warning" : "success")
+  const riskLabel = (risk: string) => riskColor[risk as keyof typeof riskColor]?.label ?? "Estável"
+  const riskIcon = (risk: string) => (risk === "high" ? "alert" : risk === "medium" ? "info" : "checkCircle")
+  const latestVitalsFor = (id: string) =>
+    evolucoesPorPaciente[id]?.find((entry) => entry.fc !== undefined || entry.spo2 !== undefined || entry.pressao !== undefined)
+  const pendingFor = (id: string) => (prescricoesEquipe[id] ?? []).filter((item) => item.status !== "administrado" && !administrados.includes(item.id))
+  const doseStatus = (item: PrescricaoItem) => {
+    const status = administrados.includes(item.id) ? "administrado" : item.status
+    const tone: Tone = status === "administrado" ? "success" : status === "atrasado" ? "danger" : "info"
+    const icon = status === "administrado" ? "check" : status === "atrasado" ? "alert" : "clock"
+    return { status, tone, icon, label: statusPrescricaoColor[status].label }
+  }
+  const minutesNow = new Date().getHours() * 60 + new Date().getMinutes()
+  const minutesOf = (time: string) => {
+    const [hours, minutes] = time.split(":").map(Number)
+    return (hours || 0) * 60 + (minutes || 0)
+  }
+  /** Distância informativa até o horário previsto (não altera o status registrado). */
+  const timeHint = (time: string) => {
+    const diff = minutesOf(time) - minutesNow
+    if (Math.abs(diff) < 1) return "agora"
+    const abs = Math.abs(diff)
+    const text = abs >= 60 ? `${Math.floor(abs / 60)}h${abs % 60 ? String(abs % 60).padStart(2, "0") : ""}` : `${abs} min`
+    return diff > 0 ? `em ${text}` : `há ${text}`
+  }
+  const isSoon = (time: string) => {
+    const diff = minutesOf(time) - minutesNow
+    return diff >= 0 && diff <= 60
+  }
+  const dosesPendentes = pacientes
+    .flatMap((patient) => pendingFor(patient.id).map((item) => ({ item, patient })))
+    .sort((a, b) => a.item.horario.localeCompare(b.item.horario))
+  const dosesProximas = dosesPendentes.filter((dose) => isSoon(dose.item.horario))
+  const dosesAtrasadas = dosesPendentes.filter((dose) => doseStatus(dose.item).status === "atrasado")
+  const dosesPrioritarias = [
+    ...dosesAtrasadas,
+    ...dosesProximas.filter((dose) => doseStatus(dose.item).status !== "atrasado"),
+    ...dosesPendentes.filter((dose) => doseStatus(dose.item).status !== "atrasado" && !isSoon(dose.item.horario)),
+  ]
+  // No celular as atrasadas nunca ficam escondidas
+  const limiteDosesCelular = Math.max(summaryLimit(Math.min(7, dosesPrioritarias.length), 4), dosesAtrasadas.length)
+  const limitePacientesCelular = summaryLimit(filteredPatients.length, 3)
+  const totalDoses = pacientes.reduce((total, patient) => total + (prescricoesEquipe[patient.id] ?? []).length, 0)
+  const dosesConfirmadas = totalDoses - dosesPendentes.length
+  const hojeCurto = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" }).format(new Date())
+  const evoluiuHoje = (id: string) =>
+    (evolucoesPorPaciente[id] ?? []).some((entry) => entry.perfil === "Enfermagem" && (entry.data.startsWith("Hoje") || entry.data.startsWith(hojeCurto)))
+  const evolucoesPendentes = pacientes.filter((patient) => !evoluiuHoje(patient.id))
+  const pacientesRisco = pacientes.filter((patient) => getPatientRisk(patient) !== "low").sort((a, b) => (getPatientRisk(a) === "high" ? -1 : 0) - (getPatientRisk(b) === "high" ? -1 : 0))
+  const selectPatient = (patient: (typeof pacientes)[number]) => {
+    setSelectedPaciente(patient)
+    setEvolucaoTexto("")
+    setEvolucaoEnviada(false)
+  }
+  const inputStyle = { background: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }
+
+  /** Lista lateral de pacientes reutilizada nas telas de cuidado. */
+  const renderPatientPicker = (list: typeof pacientes, title: string, detail: (patient: (typeof pacientes)[number]) => string) => (
+    <SectionCard title={title} description={`${list.length} paciente${list.length === 1 ? "" : "s"}`} icon="internados" bodyClassName="p-3">
+      <div className="relative mb-3">
+        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--muted-foreground)" }}><UiIcon name="search" size={16} /></span>
+        <input value={patientSearch} onChange={(e) => setPatientSearch(e.target.value)} placeholder="Buscar por nome ou leito" aria-label="Buscar paciente" className="h-11 w-full rounded-xl border pl-9 pr-3 text-sm outline-none" style={inputStyle} />
       </div>
-      {action}
-    </div>
+      <ul className="space-y-1.5">
+        {list.map((p) => {
+          const active = selectedPaciente?.id === p.id
+          const pending = pendingFor(p.id).length
+          return (
+            <li key={p.id}>
+              <button type="button" onClick={() => selectPatient(p)} aria-pressed={active} className="list-row flex w-full items-center gap-3 rounded-xl border p-2.5 text-left" style={{ background: active ? "var(--role-soft)" : "var(--card)", borderColor: active ? "var(--role)" : "var(--border)" }}>
+                <Avatar initials={p.avatar} tone={riskTone(getPatientRisk(p))} />
+                <span className="min-w-0 flex-1">
+                  <span className="block break-words text-sm font-semibold" style={{ color: "var(--foreground)" }}>{p.nome}</span>
+                  <span className="block break-words text-xs" style={{ color: "var(--muted-foreground)" }}>{detail(p)}</span>
+                </span>
+                {pending > 0 && <span className="rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums" style={{ background: "var(--warning-surface)", color: "var(--warning-foreground)" }} aria-label={`${pending} doses pendentes`}>{pending}</span>}
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+      {list.length === 0 && <EmptyState icon="search" title="Nenhum paciente encontrado" />}
+    </SectionCard>
   )
 
-  const PacienteInternadoCard = ({ p }: { p: typeof pacientes[0] }) => {
-    const c = riskColor[getPatientRisk(p) as keyof typeof riskColor]
-    const rc = evolucoesPorPaciente[p.id]?.[0]
-    const presc = prescricoesEquipe[p.id] ?? []
-    const pendentes = presc.filter(
-      (i) => i.status !== "administrado" && !administrados.includes(i.id),
-    ).length
-
-    return (
-      <button
-        onClick={() => goToPatient(p.id, "prescricao")}
-        className="w-full text-left rounded-[var(--radius)] p-4 transition-all cursor-pointer hover:-translate-y-0.5"
-        style={{ background: "var(--card)", border: "1px solid var(--border)" }}
-      >
-        <div className="flex items-start gap-3">
-          <div
-            className="w-11 h-11 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
-            style={{ background: "var(--secondary)", color: "var(--primary)" }}
-          >
-            {p.avatar}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span
-                className="font-semibold text-sm truncate"
-                style={{ color: "var(--foreground)" }}
-              >
-                {p.nome}
-              </span>
-              <span
-                className="w-2 h-2 rounded-full shrink-0"
-                style={{ background: c.dot }}
-              />
-            </div>
-            <div
-              className="text-[11px] mt-0.5"
-              style={{ color: "var(--muted-foreground)" }}
-            >
-              {p.leito} · {p.ala} · {p.condicao}
-            </div>
-          </div>
-          <span
-            className="text-[10px] font-semibold px-2 py-1 rounded-full shrink-0"
-            style={{ background: c.bg, color: c.text }}
-          >
-            {c.label}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2 mt-3">
-          {p.prescricaoAtiva ? (
-            <span
-              className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-full"
-              style={{ background: "#E8F8F5", color: "#007F72" }}
-            >
-              <span
-                className="w-1.5 h-1.5 rounded-full"
-                style={{ background: "#00A896" }}
-              />
-              Prescrição Ativa
-              {pendentes > 0 && (
-                <span
-                  className="ml-1 px-1.5 rounded-full text-[9px]"
-                  style={{ background: "#00A896", color: "white" }}
-                >
-                  {pendentes}
-                </span>
-              )}
-            </span>
-          ) : (
-            <span
-              className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-full"
-              style={{ background: "#F4F6F8", color: "#8A94A6" }}
-            >
-              <span
-                className="w-1.5 h-1.5 rounded-full"
-                style={{ background: "#8A94A6" }}
-              />
-              Sem prescrição ativa
-            </span>
-          )}
-        </div>
-
-        {rc && rc.fc !== undefined && rc.fc > 0 && (
-          <div className="grid grid-cols-4 gap-2 mt-3">
-            {[
-              { label: "PA", value: rc.pressao, unit: "" },
-              { label: "FC", value: String(rc.fc), unit: "bpm" },
-              { label: "Temp", value: String(rc.temp), unit: "°C" },
-              { label: "SpO₂", value: String(rc.spo2), unit: "%" },
-            ].map((v) => (
-              <div
-                key={v.label}
-                className="p-2 rounded-lg text-center"
-                style={{ background: "var(--secondary)" }}
-              >
-                <div
-                  className="text-xs font-bold font-mono"
-                  style={{
-                    color:
-                      v.label === "SpO₂" && Number(v.value) < 94
-                        ? "#C0392B"
-                        : "var(--primary)",
-                  }}
-                >
-                  {v.value}
-                  <span
-                    className="text-[9px] ml-0.5 font-normal"
-                    style={{ color: "var(--muted-foreground)" }}
-                  >
-                    {v.unit}
-                  </span>
-                </div>
-                <div
-                  className="text-[9px]"
-                  style={{ color: "var(--muted-foreground)" }}
-                >
-                  {v.label}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div
-          className="flex items-center justify-between mt-3 pt-3"
-          style={{ borderTop: "1px solid var(--border)" }}
-        >
-          <span
-            className="text-[10px]"
-            style={{ color: "var(--muted-foreground)" }}
-          >
-            {p.medico} · desde {p.entrada}
-          </span>
-          <Icon name="arrow" size={14} />
-        </div>
-      </button>
-    )
-  }
-
   return (
-    <div className="min-h-screen" style={{ background: "var(--background)" }}>
+    <div className="role-enfermagem min-h-screen" style={{ background: "var(--background)" }}>
       <AlertNotifications alerts={monitoringAlerts} profile="Enfermagem" onOpenAlerts={() => setActiveTab("alertas")} />
       <DashboardSidebar
         role="Enfermagem"
@@ -1002,36 +789,20 @@ export default function NurseDashboard({
         onToggleTheme={onToggleTheme}
       />
       <div className="min-w-0 xl:ml-64">
-        <header
-          className="sticky top-0 z-20 hidden min-h-16 items-center justify-end border-b px-3 py-3 sm:px-6 xl:flex"
-          style={{ background: "var(--card)", borderColor: "var(--border)" }}
-        >
-          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-            <ThemeToggle theme={theme} onToggle={onToggleTheme} />
-            <div className="min-w-0 max-w-[110px] text-right sm:max-w-[220px]">
-              <div
-                className="truncate text-xs font-semibold"
-                style={{ color: "var(--foreground)" }}
-              >
-                {ENFERMEIRA.nome}
-              </div>
-              <div
-                className="hidden text-[10px] sm:block"
-                style={{ color: "var(--muted-foreground)" }}
-              >
-                {ENFERMEIRA.cargo} · {ENFERMEIRA.coren}
-              </div>
-            </div>
-            <div
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
-              style={{ background: "var(--accent)" }}
-            >
-              {ENFERMEIRA.iniciais}
-            </div>
-          </div>
-        </header>
+        <DashboardHeader
+          role="Enfermagem"
+          section={activeTabInfo?.label ?? ""}
+          name={ENFERMEIRA.nome}
+          detail={`${ENFERMEIRA.cargo} · ${ENFERMEIRA.coren}`}
+          initials={ENFERMEIRA.iniciais}
+          theme={theme}
+          onToggleTheme={onToggleTheme}
+          alertCount={alertasPendentes.length + monitoringPendingCount}
+          onOpenAlerts={() => setActiveTab("alertas")}
+        />
 
-        <main className="dashboard-main mx-auto w-full min-w-0 max-w-7xl flex-1 px-4 pb-24 pt-20 sm:px-6 xl:p-6">
+        <SectionContext.Provider value={{ key: activeTab, label: activeTabInfo?.label ?? "", group: activeTabInfo?.group, role: "Enfermagem" }}>
+        <main className="dashboard-main mx-auto w-full min-w-0 max-w-[1400px] flex-1 px-4 pb-36 pt-20 sm:px-6 sm:pb-24 xl:p-8">
           <div className={activeTab === "monitoramento" ? "block" : "hidden"} aria-hidden={activeTab !== "monitoramento"}>
             <VitalMonitoring
               profile="Enfermagem"
@@ -1045,122 +816,193 @@ export default function NurseDashboard({
                 bed: patient.leito,
                 sector: patient.ala,
                 condition: patient.condicao,
+                bloodPressure: latestVitalsFor(patient.id)?.pressao,
               }))}
             />
           </div>
           {/* ============ INTERNADOS ============ */}
           {activeTab === "internados" && (
             <div className="fade-in">
-              <PageTitle
-                title={`Bom dia, ${ENFERMEIRA.nome.split(" ")[0]}`}
-                subtitle={`${formatLongLocalDate()} · Plantão diurno`}
-              />
-
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                {[
-                  {
-                    label: "Pacientes internados",
-                    value: String(pacientes.length),
-                    icon: "bed" as IconName,
-                    detail: "Ativos",
-                  },
-                  {
-                    label: "Prescrições ativas",
-                    value: String(
-                      pacientes.filter((p) => p.prescricaoAtiva).length,
-                    ),
-                    icon: "pill" as IconName,
-                    detail: "Em curso",
-                  },
-                  {
-                    label: "Medicações pendentes",
-                    value: String(
-                      Object.values(prescricoesEquipe)
-                        .flat()
-                        .filter(
-                          (i) =>
-                            i.status !== "administrado" &&
-                            !administrados.includes(i.id),
-                        ).length,
-                    ),
-                    icon: "clock" as IconName,
-                    detail: "Hoje",
-                  },
-                  {
-                    label: "Alertas pendentes",
-                    value: String(alertasPendentes.length),
-                    icon: "alert" as IconName,
-                    detail: "Requer ação",
-                  },
-                ].map((s) => (
-                  <div
-                    key={s.label}
-                    className="rounded-[var(--radius)] p-5"
-                    style={{
-                      background: "var(--card)",
-                      border: "1px solid var(--border)",
-                    }}
-                  >
-                    <div className="flex items-center justify-between mb-4">
-                      <div
-                        className="w-9 h-9 rounded-lg flex items-center justify-center"
-                        style={{
-                          background: "var(--secondary)",
-                          color: "var(--primary)",
-                        }}
-                      >
-                        <Icon name={s.icon} size={18} />
-                      </div>
-                      <span
-                        className="text-[10px] font-medium"
-                        style={{ color: "var(--muted-foreground)" }}
-                      >
-                        {s.detail}
-                      </span>
-                    </div>
-                    <div
-                      className="text-2xl font-bold tracking-tight"
-                      style={{ color: "var(--foreground)" }}
-                    >
-                      {s.value}
-                    </div>
-                    <div
-                      className="text-xs mt-1"
-                      style={{ color: "var(--muted-foreground)" }}
-                    >
-                      {s.label}
-                    </div>
+              <HeroHeader
+                eyebrow={`Central do plantão · ${shiftLabel()}`}
+                title={`${greeting()}, ${ENFERMEIRA.nome.split(" ")[0]}`}
+                subtitle={`${formatLongLocalDate()} · ${ENFERMEIRA.cargo} · ${ENFERMEIRA.coren}`}
+                aside={
+                  <div className="hero-actions grid grid-cols-3 gap-2 lg:flex lg:flex-wrap">
+                    <QuickAction variant="hero" icon="administracao" label="Administrar medicação" onClick={() => setActiveTab("administracao")} />
+                    <QuickAction variant="hero" icon="evolucao" label="Registrar evolução" onClick={() => setActiveTab("evolucao")} />
+                    <QuickAction variant="hero" icon="monitoramento" label="Monitoramento" onClick={() => setActiveTab("monitoramento")} />
                   </div>
-                ))}
-              </div>
+                }
+              >
+                <div className="keep-2-cols grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+                  <HeroStat label="Pacientes sob cuidado" value={pacientes.length} hint={`${pacientes.filter((p) => p.prescricaoAtiva).length} com prescrição ativa`} />
+                  <HeroStat label="Medicações pendentes" value={dosesPendentes.length} hint={`${dosesConfirmadas} de ${totalDoses} confirmadas`} />
+                  <HeroStat label="Próxima hora" value={dosesProximas.length} hint="Doses previstas em até 60 min" />
+                  <HeroStat label="Alertas pendentes" value={alertasPendentes.length + monitoringPendingCount} hint="Clínicos e monitoramento" alert={alertasPendentes.length + monitoringPendingCount > 0} />
+                </div>
+              </HeroHeader>
 
-              <div className="flex items-center gap-3 mb-4">
-                <div className="relative flex-1 max-w-md">
-                  <span
-                    className="absolute left-3 top-1/2 -translate-y-1/2"
-                    style={{ color: "var(--muted-foreground)" }}
-                  >
-                    <Icon name="search" size={16} />
-                  </span>
-                  <input
-                    value={patientSearch}
-                    onChange={(e) => setPatientSearch(e.target.value)}
-                    placeholder="Buscar por nome, leito ou condição..."
-                    className="w-full h-10 pl-9 pr-3 rounded-lg text-xs outline-none"
-                    style={{
-                      background: "var(--card)",
-                      border: "1px solid var(--border)",
-                      color: "var(--foreground)",
-                    }}
-                  />
+              <div className="mb-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
+                <SectionCard
+                  className="lg:col-span-2"
+                  title="Medicações do plantão"
+                  description="Doses pendentes em ordem de horário"
+                  icon="administracao"
+                  action={<button type="button" onClick={() => setActiveTab("administracao")} className="min-h-9 rounded-lg px-3 text-xs font-semibold" style={{ background: "var(--secondary)", color: "var(--primary)" }}>Abrir administração</button>}
+                  bodyClassName="p-2 sm:p-3"
+                >
+                  {dosesPendentes.length ? (
+                    <ul className="space-y-1" id="lista-doses-plantao">
+                      {dosesPrioritarias.slice(0, 7).map(({ item, patient }, index) => {
+                        const status = doseStatus(item)
+                        const soon = isSoon(item.horario)
+                        return (
+                          <li key={item.id} className={index >= limiteDosesCelular && !listasExpandidas.doses ? "max-sm:hidden" : undefined}>
+                            <button type="button" onClick={() => goToPatient(patient.id, "administracao")} className="list-row grid w-full grid-cols-[3.5rem_minmax(0,1fr)_auto] items-center gap-3 rounded-xl border border-transparent p-2.5 text-left">
+                              <span className="text-center">
+                                <span className="block font-mono text-base font-semibold tabular-nums" style={{ color: "var(--role-strong)" }}>{item.horario}</span>
+                                <span className="block text-[11px]" style={{ color: soon ? "var(--warning-foreground)" : "var(--muted-foreground)" }}>{timeHint(item.horario)}</span>
+                              </span>
+                              <span className="min-w-0">
+                                <span className="flex items-start gap-1.5 break-words text-sm font-semibold" style={{ color: "var(--foreground)" }}><UiIcon name="pill" size={14} className="mt-0.5 shrink-0" />{item.medicamento} · {item.dosagem}</span>
+                                <span className="block break-words text-xs" style={{ color: "var(--muted-foreground)" }}>{patient.nome} · Leito {patient.leito} · Via {item.via}</span>
+                              </span>
+                              <StatusBadge tone={soon && status.status !== "atrasado" ? "warning" : status.tone} icon={status.icon} size="sm">{soon && status.status !== "atrasado" ? "Próxima" : status.label}</StatusBadge>
+                            </button>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  ) : (
+                    <EmptyState icon="checkCircle" title="Todas as medicações foram confirmadas" description="Nenhuma dose pendente para os pacientes sob cuidado." />
+                  )}
+                  <ShowMoreButton expanded={!!listasExpandidas.doses} onToggle={() => alternarLista("doses")} hiddenCount={Math.min(7, dosesPrioritarias.length) - limiteDosesCelular} controls="lista-doses-plantao" label={["dose", "doses"]} />
+                  {dosesPendentes.length > 7 && <p className="px-2.5 pt-2 text-xs" style={{ color: "var(--muted-foreground)" }}>+ {dosesPendentes.length - 7} dose(s) na tela de administração</p>}
+                </SectionCard>
+
+                <div className="flex flex-col gap-5">
+                  <SectionCard title="Maior risco" description="Prioridade de atenção" icon="alert" tone={pacientesRisco.length ? "danger" : "success"} bodyClassName="p-3">
+                    {pacientesRisco.length ? (
+                      <ul className="space-y-1.5">
+                        {pacientesRisco.map((patient) => (
+                          <li key={patient.id}>
+                            <button type="button" onClick={() => goToPatient(patient.id, "prescricao")} className="list-row flex w-full items-center gap-3 rounded-xl border p-2.5 text-left" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
+                              <Avatar initials={patient.avatar} size="sm" tone={riskTone(getPatientRisk(patient))} />
+                              <span className="min-w-0 flex-1">
+                                <span className="block break-words text-sm font-semibold" style={{ color: "var(--foreground)" }}>{patient.nome}</span>
+                                <span className="block break-words text-xs" style={{ color: "var(--muted-foreground)" }}>Leito {patient.leito} · {patient.condicao}</span>
+                              </span>
+                              <StatusBadge tone={riskTone(getPatientRisk(patient))} size="sm">{riskLabel(getPatientRisk(patient))}</StatusBadge>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <EmptyState icon="checkCircle" title="Nenhum paciente em risco" />
+                    )}
+                  </SectionCard>
+
+                  <SectionCard title="Resumo do plantão" icon="checkCircle" tone="success">
+                    <div className="space-y-4">
+                      <div>
+                        <div className="mb-1.5 flex justify-between text-xs"><span style={{ color: "var(--muted-foreground)" }}>Administrações confirmadas</span><strong className="tabular-nums" style={{ color: "var(--foreground)" }}>{dosesConfirmadas}/{totalDoses}</strong></div>
+                        <ProgressBar value={totalDoses ? (dosesConfirmadas / totalDoses) * 100 : 0} tone="success" label="Administrações confirmadas" />
+                      </div>
+                      <div>
+                        <div className="mb-1.5 flex justify-between text-xs"><span style={{ color: "var(--muted-foreground)" }}>Evoluções registradas hoje</span><strong className="tabular-nums" style={{ color: "var(--foreground)" }}>{pacientes.length - evolucoesPendentes.length}/{pacientes.length}</strong></div>
+                        <ProgressBar value={pacientes.length ? ((pacientes.length - evolucoesPendentes.length) / pacientes.length) * 100 : 0} tone="role" label="Evoluções registradas hoje" />
+                      </div>
+                      {evolucoesPendentes.length > 0 && (
+                        <div className="rounded-xl border p-3" style={{ background: "var(--background)", borderColor: "var(--border)" }}>
+                          <p className="text-xs font-semibold" style={{ color: "var(--foreground)" }}>Evoluções pendentes</p>
+                          <ul className="mt-1.5 space-y-1">
+                            {evolucoesPendentes.slice(0, 4).map((patient) => (
+                              <li key={patient.id}>
+                                <button type="button" onClick={() => { selectPatient(patient); setActiveTab("evolucao") }} className="flex min-h-8 w-full items-center justify-between gap-2 text-left text-xs" style={{ color: "var(--muted-foreground)" }}>
+                                  <span className="break-words">{patient.nome} · {patient.leito}</span>
+                                  <span className="shrink-0 font-semibold" style={{ color: "var(--primary)" }}>Evoluir</span>
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  </SectionCard>
+
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredPatients.map((p) => (
-                  <PacienteInternadoCard key={p.id} p={p} />
-                ))}
-              </div>
+              <SectionCard
+                title="Pacientes sob cuidado"
+                description="Leito, condição, prescrição e últimos sinais vitais"
+                icon="internados"
+                action={
+                  <div className="relative hidden sm:block">
+                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--muted-foreground)" }}><UiIcon name="search" size={15} /></span>
+                    <input value={patientSearch} onChange={(e) => setPatientSearch(e.target.value)} placeholder="Buscar nome, leito ou condição" aria-label="Buscar paciente internado" className="h-10 w-64 rounded-lg border pl-9 pr-3 text-sm outline-none" style={inputStyle} />
+                  </div>
+                }
+              >
+                <div className="relative mb-4 sm:hidden">
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--muted-foreground)" }}><UiIcon name="search" size={15} /></span>
+                  <input value={patientSearch} onChange={(e) => setPatientSearch(e.target.value)} placeholder="Buscar nome, leito ou condição" aria-label="Buscar paciente internado" className="h-11 w-full rounded-lg border pl-9 pr-3 text-sm outline-none" style={inputStyle} />
+                </div>
+                {filteredPatients.length === 0 && <EmptyState icon="search" title="Nenhum paciente encontrado" description="Ajuste o termo de busca." />}
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3" id="lista-pacientes-plantao">
+                  {filteredPatients.map((p, index) => {
+                    const risk = getPatientRisk(p)
+                    const vitals = latestVitalsFor(p.id)
+                    const pending = pendingFor(p.id).length
+                    return (
+                      <article key={p.id} className={"flex min-w-0 flex-col overflow-hidden rounded-xl border" + (index >= limitePacientesCelular && !listasExpandidas.pacientes && !patientSearch.trim() ? " max-sm:hidden" : "")} style={{ background: "var(--card)", borderColor: "var(--border)" }}>
+                        <div className="flex items-start gap-3 p-4">
+                          <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl" style={{ background: "var(--role-soft)", color: "var(--role-strong)" }}>
+                            <span className="text-[10px] font-semibold uppercase leading-none">Leito</span>
+                            <span className="text-sm font-bold leading-tight">{p.leito}</span>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <h3 className="break-words text-sm font-semibold" style={{ color: "var(--foreground)" }}>{p.nome}</h3>
+                              <StatusBadge tone={riskTone(risk)} icon={riskIcon(risk)} size="sm">{riskLabel(risk)}</StatusBadge>
+                            </div>
+                            <p className="break-words text-xs" style={{ color: "var(--muted-foreground)" }}>{p.ala} · {p.idade} anos</p>
+                            <p className="mt-1 line-clamp-2 text-xs" style={{ color: "var(--foreground)" }}>{p.condicao}</p>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 px-4">
+                          {p.prescricaoAtiva ? <StatusBadge tone="info" icon="prescricao" size="sm">Prescrição ativa</StatusBadge> : <StatusBadge tone="neutral" size="sm">Sem prescrição ativa</StatusBadge>}
+                          {pending > 0 ? <StatusBadge tone="warning" icon="clock" size="sm">{pending} dose{pending === 1 ? "" : "s"} pendente{pending === 1 ? "" : "s"}</StatusBadge> : p.prescricaoAtiva && <StatusBadge tone="success" icon="check" size="sm">Doses em dia</StatusBadge>}
+                        </div>
+                        {vitals && (
+                          <div className="keep-2-cols mt-3 grid grid-cols-2 gap-1 border-y px-2 py-2.5 text-center tabular-nums min-[390px]:grid-cols-4" style={{ borderColor: "var(--border)" }}>
+                            {[
+                              { label: "PA", value: vitals.pressao ?? "—", alert: false },
+                              { label: "FC", value: vitals.fc ?? "—", alert: vitals.fc !== undefined && vitals.fc > 100 },
+                              { label: "Temp", value: vitals.temp ?? "—", alert: vitals.temp !== undefined && vitals.temp >= 38 },
+                              { label: "SpO₂", value: vitals.spo2 !== undefined ? vitals.spo2 + "%" : "—", alert: vitals.spo2 !== undefined && vitals.spo2 < 94 },
+                            ].map((v) => (
+                              <div key={v.label} className="min-w-0">
+                                <p className="truncate text-sm font-bold" style={{ color: v.alert ? "var(--danger-foreground)" : "var(--foreground)" }}>{v.value}</p>
+                                <p className="text-[11px]" style={{ color: "var(--muted-foreground)" }}>{v.label}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div className="mt-auto flex items-center justify-between gap-2 p-3 pt-3">
+                          <span className="min-w-0 break-words text-xs" style={{ color: "var(--muted-foreground)" }}>{p.medico} · desde {p.entrada}</span>
+                          <div className="flex shrink-0 gap-1.5">
+                            <button type="button" onClick={() => goToPatient(p.id, "prescricao")} className="min-h-9 rounded-lg px-2.5 text-xs font-semibold" style={{ background: "var(--secondary)", color: "var(--primary)" }}>Prescrição</button>
+                            <button type="button" onClick={() => { goToPatient(p.id, "evolucao"); setEvolucaoTexto(""); setEvolucaoEnviada(false) }} className="min-h-9 rounded-lg px-2.5 text-xs font-semibold" style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}>Evoluir</button>
+                          </div>
+                        </div>
+                      </article>
+                    )
+                  })}
+                </div>
+                {!patientSearch.trim() && <ShowMoreButton expanded={!!listasExpandidas.pacientes} onToggle={() => alternarLista("pacientes")} hiddenCount={filteredPatients.length - limitePacientesCelular} controls="lista-pacientes-plantao" label={["paciente", "pacientes"]} />}
+              </SectionCard>
             </div>
           )}
 
@@ -1168,196 +1010,66 @@ export default function NurseDashboard({
           {activeTab === "prescricao" && (
             <div className="fade-in">
               <PageTitle
-                title="Detalhe da prescrição"
-                subtitle="Medicamentos, doses, horários e vias de administração"
+                title="Prescrições"
+                subtitle="Medicamentos, doses, vias e cronograma de administração por paciente"
+                meta={
+                  <>
+                    <MetaItem icon="prescricao" label="Com prescrição ativa" value={pacientes.filter((p) => p.prescricaoAtiva).length} tone="info" />
+                    <MetaItem icon="clock" label="Doses pendentes" value={dosesPendentes.length} tone="warning" />
+                    <MetaItem icon="checkCircle" label="Confirmadas" value={dosesConfirmadas} tone="success" />
+                  </>
+                }
               />
-              {selectedPaciente ? (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                  <div className="flex flex-col gap-3">
-                    <div className="relative">
-                      <span
-                        className="absolute left-3 top-1/2 -translate-y-1/2"
-                        style={{ color: "var(--muted-foreground)" }}
-                      >
-                        <Icon name="search" size={16} />
-                      </span>
-                      <input
-                        value={patientSearch}
-                        onChange={(e) => setPatientSearch(e.target.value)}
-                        placeholder="Buscar paciente..."
-                        className="w-full h-10 pl-9 pr-3 rounded-lg text-xs outline-none"
-                        style={{
-                          background: "var(--card)",
-                          border: "1px solid var(--border)",
-                          color: "var(--foreground)",
-                        }}
-                      />
-                    </div>
-                    {filteredPatients.map((p) => (
-                      <button
-                        key={p.id}
-                        onClick={() => setSelectedPaciente(p)}
-                        className="w-full text-left p-4 rounded-[var(--radius)] flex items-center gap-3 transition-all cursor-pointer"
-                        style={{
-                          background:
-                            selectedPaciente?.id === p.id
-                              ? "var(--primary)"
-                              : "var(--card)",
-                          border: `1px solid ${
-                            selectedPaciente?.id === p.id
-                              ? "var(--primary)"
-                              : "var(--border)"
-                          }`,
-                        }}
-                      >
-                        <div
-                          className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
-                          style={{
-                            background:
-                              selectedPaciente?.id === p.id
-                                ? "rgba(255,255,255,.16)"
-                                : "var(--secondary)",
-                            color:
-                              selectedPaciente?.id === p.id
-                                ? "white"
-                                : "var(--primary)",
-                          }}
-                        >
-                          {p.avatar}
+              <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)]">
+                {renderPatientPicker(filteredPatients, "Pacientes", (p) => `Leito ${p.leito} · ${p.condicao}`)}
+                {selectedPaciente ? (
+                  <section className="min-w-0 overflow-hidden rounded-2xl border" style={{ background: "var(--card)", borderColor: "var(--border)", boxShadow: "var(--shadow-sm)" }} aria-label={`Prescrição de ${selectedPaciente.nome}`}>
+                    <header className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center" style={{ background: "linear-gradient(120deg, var(--role-soft), var(--card) 70%)" }}>
+                      <Avatar initials={selectedPaciente.avatar} size="lg" tone={riskTone(getPatientRisk(selectedPaciente))} solid />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h2 className="text-lg font-bold" style={{ color: "var(--foreground)" }}>{selectedPaciente.nome}</h2>
+                          {selectedPaciente.prescricaoAtiva ? <StatusBadge tone="info" icon="prescricao" size="sm">Prescrição ativa</StatusBadge> : <StatusBadge tone="neutral" size="sm">Sem prescrição ativa</StatusBadge>}
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div
-                            className="font-semibold text-sm truncate"
-                            style={{
-                              color:
-                                selectedPaciente?.id === p.id
-                                  ? "white"
-                                  : "var(--foreground)",
-                            }}
-                          >
-                            {p.nome}
-                          </div>
-                          <div
-                            className="text-xs truncate mt-0.5"
-                            style={{
-                              color:
-                                selectedPaciente?.id === p.id
-                                  ? "rgba(255,255,255,.7)"
-                                  : "var(--muted-foreground)",
-                            }}
-                          >
-                            {p.leito} · {p.condicao}
-                          </div>
-                        </div>
+                        <p className="mt-0.5 text-sm" style={{ color: "var(--muted-foreground)" }}>Leito {selectedPaciente.leito} · {selectedPaciente.ala} · {selectedPaciente.condicao}</p>
+                        <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>Prescritor: {selectedPaciente.medico}</p>
+                      </div>
+                      <button type="button" onClick={() => setActiveTab("administracao")} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold" style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}>
+                        <UiIcon name="administracao" size={15} /> Ir para administração
                       </button>
-                    ))}
-                  </div>
-
-                  <div className="lg:col-span-2 flex flex-col gap-4">
-                    <div
-                      className="rounded-[var(--radius)] p-5"
-                      style={{
-                        background: "var(--card)",
-                        border: "1px solid var(--border)",
-                      }}
-                    >
-                      <div className="flex items-start gap-4 mb-4">
-                        <div
-                          className="w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0"
-                          style={{ background: "var(--primary)" }}
-                        >
-                          {selectedPaciente.avatar}
-                        </div>
-                        <div className="flex-1">
-                          <h2
-                            className="text-lg font-semibold"
-                            style={{ color: "var(--foreground)" }}
-                          >
-                            {selectedPaciente.nome}
-                          </h2>
-                          <div
-                            className="text-[11px] mt-0.5"
-                            style={{ color: "var(--muted-foreground)" }}
-                          >
-                            {selectedPaciente.leito} · {selectedPaciente.ala} ·{" "}
-                            {selectedPaciente.medico}
-                          </div>
-                        </div>
-                        {selectedPaciente.prescricaoAtiva && (
-                          <span
-                            className="text-[10px] font-bold px-2 py-1 rounded-full"
-                            style={{ background: "#E8F8F5", color: "#007F72" }}
-                          >
-                            Prescrição Ativa
-                          </span>
-                        )}
-                      </div>
-
-                      <div
-                        className="text-[10px] font-semibold uppercase tracking-wider mb-3"
-                        style={{ color: "var(--muted-foreground)" }}
-                      >
-                        Cronograma de administração
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        {prescricaoAtual.map((item) => {
-                          const adm = administrados.includes(item.id)
-                          const status = adm ? "administrado" : item.status
-                          const sc = statusPrescricaoColor[status]
-                          return (
-                            <div
-                              key={item.id}
-                              className="flex items-center gap-3 p-3 rounded-lg"
-                              style={{
-                                background: "var(--secondary)",
-                                borderLeft: `3px solid ${sc.dot}`,
-                              }}
-                            >
-                              <div
-                                className="w-14 text-center font-mono text-xs font-bold shrink-0"
-                                style={{ color: "var(--primary)" }}
+                    </header>
+                    <div className="border-t p-5" style={{ borderColor: "var(--border)" }}>
+                      <p className="mb-4 text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Cronograma de administração</p>
+                      {prescricaoAtual.length ? (
+                        <ol>
+                          {prescricaoAtual.map((item, index) => {
+                            const status = doseStatus(item)
+                            return (
+                              <TimelineItem
+                                key={item.id}
+                                last={index === prescricaoAtual.length - 1}
+                                tone={status.tone}
+                                title={<span className="flex items-center gap-2"><span className="font-mono tabular-nums" style={{ color: "var(--role-strong)" }}>{item.horario}</span>{item.medicamento}</span>}
+                                meta={<StatusBadge tone={status.tone} icon={status.icon} size="sm">{status.label}</StatusBadge>}
                               >
-                                {item.horario}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <Icon name="pill" size={14} />
-                                  <span
-                                    className="font-semibold text-sm"
-                                    style={{ color: "var(--foreground)" }}
-                                  >
-                                    {item.medicamento}
-                                  </span>
-                                </div>
-                                <div
-                                  className="text-[11px] mt-0.5"
-                                  style={{ color: "var(--muted-foreground)" }}
-                                >
-                                  {item.dosagem} · Via {item.via}
-                                </div>
-                              </div>
-                              <span
-                                className="text-[10px] font-semibold px-2 py-1 rounded-full shrink-0"
-                                style={{ background: sc.bg, color: sc.text }}
-                              >
-                                {sc.label}
-                              </span>
-                            </div>
-                          )
-                        })}
-                        {prescricaoAtual.length === 0 && (
-                          <p
-                            className="text-xs text-center py-6"
-                            style={{ color: "var(--muted-foreground)" }}
-                          >
-                            Nenhum medicamento prescrito.
-                          </p>
-                        )}
-                      </div>
+                                <span className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                                  <span>Dose <strong style={{ color: "var(--foreground)" }}>{item.dosagem}</strong></span>
+                                  <span>Via <strong style={{ color: "var(--foreground)" }}>{item.via}</strong></span>
+                                  {status.status !== "administrado" && <span>{timeHint(item.horario)}</span>}
+                                </span>
+                              </TimelineItem>
+                            )
+                          })}
+                        </ol>
+                      ) : (
+                        <EmptyState icon="prescricao" title="Nenhum medicamento prescrito" description="Quando o médico prescrever, os itens aparecerão aqui." />
+                      )}
                     </div>
-                  </div>
-                </div>
-              ) : null}
+                  </section>
+                ) : (
+                  <EmptyState icon="prescricao" title="Selecione um paciente" description="Escolha um paciente na lista para ver a prescrição." />
+                )}
+              </div>
             </div>
           )}
 
@@ -1365,197 +1077,85 @@ export default function NurseDashboard({
           {activeTab === "administracao" && (
             <div className="fade-in">
               <PageTitle
-                title="Registro de administração"
-                subtitle="Confirmação em poucos cliques · horário e profissional automáticos"
+                title="Administração de medicamentos"
+                subtitle="Confirme cada dose após a checagem · horário e profissional são registrados automaticamente"
+                meta={
+                  <>
+                    <MetaItem icon="clock" label="Agora" value={agora} tone="info" />
+                    <MetaItem icon="user" label="Profissional" value={ENFERMEIRA.assinatura} tone="neutral" />
+                    <MetaItem icon="administracao" label="Pendentes no plantão" value={dosesPendentes.length} tone="warning" />
+                  </>
+                }
               />
-              {selectedPaciente ? (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                  <div className="flex flex-col gap-3">
-                    {pacientes
-                      .filter((p) => p.prescricaoAtiva)
-                      .map((p) => (
-                        <button
-                          key={p.id}
-                          onClick={() => setSelectedPaciente(p)}
-                          className="w-full text-left p-4 rounded-[var(--radius)] flex items-center gap-3 transition-all cursor-pointer"
-                          style={{
-                            background:
-                              selectedPaciente?.id === p.id
-                                ? "var(--primary)"
-                                : "var(--card)",
-                            border: `1px solid ${
-                              selectedPaciente?.id === p.id
-                                ? "var(--primary)"
-                                : "var(--border)"
-                            }`,
-                          }}
-                        >
-                          <div
-                            className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
-                            style={{
-                              background:
-                                selectedPaciente?.id === p.id
-                                  ? "rgba(255,255,255,.16)"
-                                  : "var(--secondary)",
-                              color:
-                                selectedPaciente?.id === p.id
-                                  ? "white"
-                                  : "var(--primary)",
-                            }}
-                          >
-                            {p.avatar}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div
-                              className="font-semibold text-sm truncate"
-                              style={{
-                                color:
-                                  selectedPaciente?.id === p.id
-                                    ? "white"
-                                    : "var(--foreground)",
-                              }}
-                            >
-                              {p.nome}
-                            </div>
-                            <div
-                              className="text-xs truncate mt-0.5"
-                              style={{
-                                color:
-                                  selectedPaciente?.id === p.id
-                                    ? "rgba(255,255,255,.7)"
-                                    : "var(--muted-foreground)",
-                              }}
-                            >
-                              {p.leito} · {p.condicao}
-                            </div>
-                          </div>
-                        </button>
-                      ))}
-                  </div>
-
-                  <div className="lg:col-span-2 flex flex-col gap-3">
-                    <div
-                      className="rounded-[var(--radius)] p-4 flex flex-wrap gap-4"
-                      style={{
-                        background: "var(--secondary)",
-                        border: "1px solid var(--border)",
-                      }}
-                    >
-                      <div>
-                        <div
-                          className="text-[9px] uppercase tracking-wide"
-                          style={{ color: "var(--muted-foreground)" }}
-                        >
-                          Horário
-                        </div>
-                        <div
-                          className="text-sm font-bold font-mono mt-0.5"
-                          style={{ color: "var(--primary)" }}
-                        >
-                          {agora}
-                        </div>
+              <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)]">
+                {renderPatientPicker(pacientes.filter((p) => p.prescricaoAtiva && filteredPatients.some((item) => item.id === p.id)), "Com prescrição ativa", (p) => `Leito ${p.leito} · ${pendingFor(p.id).length} pendente(s)`)}
+                {selectedPaciente ? (
+                  <div className="flex min-w-0 flex-col gap-4">
+                    <div className="flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center" style={{ background: "var(--card)", borderColor: "var(--border)", boxShadow: "var(--shadow-sm)" }}>
+                      <Avatar initials={selectedPaciente.avatar} size="lg" tone={riskTone(getPatientRisk(selectedPaciente))} solid />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-lg font-bold" style={{ color: "var(--foreground)" }}>{selectedPaciente.nome}</p>
+                        <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>Leito {selectedPaciente.leito} · {selectedPaciente.ala} · {selectedPaciente.idade} anos</p>
                       </div>
-                      <div>
-                        <div
-                          className="text-[9px] uppercase tracking-wide"
-                          style={{ color: "var(--muted-foreground)" }}
-                        >
-                          Profissional
+                      <div className="min-w-[10rem]">
+                        <div className="mb-1.5 flex justify-between text-xs" style={{ color: "var(--muted-foreground)" }}>
+                          <span>Doses confirmadas</span>
+                          <strong className="tabular-nums" style={{ color: "var(--foreground)" }}>{prescricaoAtual.length - pendingFor(selectedPaciente.id).length}/{prescricaoAtual.length}</strong>
                         </div>
-                        <div
-                          className="text-sm font-semibold mt-0.5"
-                          style={{ color: "var(--foreground)" }}
-                        >
-                          {ENFERMEIRA.assinatura}
-                        </div>
-                      </div>
-                      <div>
-                        <div
-                          className="text-[9px] uppercase tracking-wide"
-                          style={{ color: "var(--muted-foreground)" }}
-                        >
-                          Paciente
-                        </div>
-                        <div
-                          className="text-sm font-semibold mt-0.5"
-                          style={{ color: "var(--foreground)" }}
-                        >
-                          {selectedPaciente.nome} · {selectedPaciente.leito}
-                        </div>
+                        <ProgressBar value={prescricaoAtual.length ? ((prescricaoAtual.length - pendingFor(selectedPaciente.id).length) / prescricaoAtual.length) * 100 : 0} tone="success" label="Doses confirmadas" />
                       </div>
                     </div>
 
-                    {prescricaoAtual.map((item) => {
-                      const adm = administrados.includes(item.id)
-                      const status = adm ? "administrado" : item.status
-                      const sc = statusPrescricaoColor[status]
-                      return (
-                        <div
-                          key={item.id}
-                          className="rounded-[var(--radius)] p-4 flex items-center gap-4"
-                          style={{
-                            background: "var(--card)",
-                            border: `1px solid ${
-                              adm ? "var(--border)" : sc.dot + "55"
-                            }`,
-                            opacity: adm ? 0.75 : 1,
-                          }}
-                        >
-                          <div
-                            className="w-12 text-center font-mono text-sm font-bold shrink-0"
-                            style={{ color: "var(--primary)" }}
-                          >
-                            {item.horario}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <Icon name="pill" size={15} />
-                              <span
-                                className="font-semibold text-sm"
-                                style={{ color: "var(--foreground)" }}
-                              >
-                                {item.medicamento}
-                              </span>
-                              <span
-                                className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
-                                style={{ background: sc.bg, color: sc.text }}
-                              >
-                                {sc.label}
-                              </span>
+                    <div className="flex items-start gap-3 rounded-xl border p-3.5 text-sm" style={{ background: "var(--warning-surface)", borderColor: toneStyles.warning.border, color: "var(--warning-foreground)" }} role="note">
+                      <UiIcon name="shield" size={18} />
+                      <p><strong>Antes de confirmar:</strong> confira paciente, medicamento, dose, via e horário. Registro demonstrativo — não substitui a checagem à beira do leito.</p>
+                    </div>
+
+                    {prescricaoAtual.length === 0 && <EmptyState icon="administracao" title="Sem medicamentos para este paciente" />}
+                    <ul className="flex flex-col gap-3">
+                      {prescricaoAtual.map((item) => {
+                        const status = doseStatus(item)
+                        const adm = status.status === "administrado"
+                        const soon = !adm && isSoon(item.horario)
+                        return (
+                          <li key={item.id} className="relative overflow-hidden rounded-2xl border" style={{ background: adm ? "color-mix(in srgb, var(--success-surface) 45%, var(--card))" : "var(--card)", borderColor: soon ? toneStyles.warning.border : status.status === "atrasado" ? toneStyles.danger.border : "var(--border)", boxShadow: adm ? "none" : "var(--shadow-sm)" }}>
+                            <span className="absolute inset-y-0 left-0 w-1.5" style={{ background: soon ? "var(--warning)" : toneStyles[status.tone].solid }} aria-hidden="true" />
+                            <div className="flex flex-col gap-4 p-4 pl-6 sm:flex-row sm:items-center">
+                              <div className="flex items-center gap-4 sm:w-28 sm:flex-col sm:items-start sm:gap-0">
+                                <p className="font-mono text-2xl font-bold leading-none tabular-nums" style={{ color: adm ? "var(--muted-foreground)" : "var(--foreground)" }}>{item.horario}</p>
+                                {!adm && <p className="text-xs font-medium sm:mt-1" style={{ color: soon ? "var(--warning-foreground)" : "var(--muted-foreground)" }}>{timeHint(item.horario)}</p>}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="text-base font-semibold" style={{ color: "var(--foreground)" }}>{item.medicamento}</p>
+                                  <StatusBadge tone={status.tone} icon={status.icon} size="sm">{status.label}</StatusBadge>
+                                  {soon && <StatusBadge tone="warning" icon="clock" size="sm">Próximo horário</StatusBadge>}
+                                </div>
+                                <dl className="mt-2 flex flex-wrap gap-2 text-xs">
+                                  <div className="rounded-lg border px-2.5 py-1" style={{ borderColor: "var(--border)" }}><dt className="inline" style={{ color: "var(--muted-foreground)" }}>Dose </dt><dd className="inline font-semibold" style={{ color: "var(--foreground)" }}>{item.dosagem}</dd></div>
+                                  <div className="rounded-lg border px-2.5 py-1" style={{ borderColor: "var(--border)" }}><dt className="inline" style={{ color: "var(--muted-foreground)" }}>Via </dt><dd className="inline font-semibold" style={{ color: "var(--foreground)" }}>{item.via}</dd></div>
+                                  <div className="rounded-lg border px-2.5 py-1" style={{ borderColor: "var(--border)" }}><dt className="inline" style={{ color: "var(--muted-foreground)" }}>Código </dt><dd className="inline font-mono" style={{ color: "var(--foreground)" }}>{item.id}</dd></div>
+                                </dl>
+                              </div>
+                              {adm ? (
+                                <p className="flex items-center gap-2 text-xs font-semibold sm:max-w-[12rem]" style={{ color: "var(--success-foreground)" }}>
+                                  <UiIcon name="checkCircle" size={18} /> Administração registrada · {ENFERMEIRA.nome}
+                                </p>
+                              ) : (
+                                <button type="button" onClick={() => confirmarAdministracao(item.id)} aria-label={`Confirmar administração de ${item.medicamento} ${item.dosagem} às ${item.horario}`} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold" style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}>
+                                  <UiIcon name="check" size={16} /> Confirmar
+                                </button>
+                              )}
                             </div>
-                            <div
-                              className="text-[11px] mt-1"
-                              style={{ color: "var(--muted-foreground)" }}
-                            >
-                              Dose: {item.dosagem} · Via: {item.via}
-                            </div>
-                          </div>
-                          {adm ? (
-                            <span
-                              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg shrink-0"
-                              style={{
-                                background: "#E8F8F5",
-                                color: "#007F72",
-                              }}
-                            >
-                              <Icon name="check" size={14} />
-                              Administrado
-                            </span>
-                          ) : (
-                            <button
-                              onClick={() => confirmarAdministracao(item.id)}
-                              className="h-9 px-4 rounded-lg text-xs font-semibold text-white cursor-pointer shrink-0"
-                              style={{ background: "var(--primary)" }}
-                            >
-                              Confirmar
-                            </button>
-                          )}
-                        </div>
-                      )
-                    })}
+                          </li>
+                        )
+                      })}
+                    </ul>
                   </div>
-                </div>
-              ) : null}
+                ) : (
+                  <EmptyState icon="administracao" title="Selecione um paciente" description="Escolha um paciente com prescrição ativa para registrar a administração." />
+                )}
+              </div>
             </div>
           )}
 
@@ -1564,246 +1164,123 @@ export default function NurseDashboard({
             <div className="fade-in">
               <PageTitle
                 title="Evolução e observação clínica"
-                subtitle="Registro enviado diretamente ao médico responsável"
+                subtitle="Registro de enfermagem enviado diretamente ao médico responsável"
+                meta={
+                  <>
+                    <MetaItem icon="evolucao" label="Evoluídos hoje" value={`${pacientes.length - evolucoesPendentes.length}/${pacientes.length}`} tone="success" />
+                    <MetaItem icon="clock" label="Pendentes" value={evolucoesPendentes.length} tone="warning" />
+                  </>
+                }
               />
-              {selectedPaciente ? (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                  <div className="flex flex-col gap-3">
-                    {pacientes.map((p) => (
-                      <button
-                        key={p.id}
-                        onClick={() => {
-                          setSelectedPaciente(p)
-                          setEvolucaoTexto("")
-                          setEvolucaoEnviada(false)
-                        }}
-                        className="w-full text-left p-4 rounded-[var(--radius)] flex items-center gap-3 transition-all cursor-pointer"
-                        style={{
-                          background:
-                            selectedPaciente?.id === p.id
-                              ? "var(--primary)"
-                              : "var(--card)",
-                          border: `1px solid ${
-                            selectedPaciente?.id === p.id
-                              ? "var(--primary)"
-                              : "var(--border)"
-                          }`,
-                        }}
-                      >
-                        <div
-                          className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
-                          style={{
-                            background:
-                              selectedPaciente?.id === p.id
-                                ? "rgba(255,255,255,.16)"
-                                : "var(--secondary)",
-                            color:
-                              selectedPaciente?.id === p.id
-                                ? "white"
-                                : "var(--primary)",
-                          }}
-                        >
-                          {p.avatar}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div
-                            className="font-semibold text-sm truncate"
-                            style={{
-                              color:
-                                selectedPaciente?.id === p.id
-                                  ? "white"
-                                  : "var(--foreground)",
-                            }}
-                          >
-                            {p.nome}
+              <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)]">
+                {renderPatientPicker(filteredPatients, "Pacientes", (p) => `Leito ${p.leito} · ${evoluiuHoje(p.id) ? "evoluído hoje" : "evolução pendente"}`)}
+                {selectedPaciente ? (
+                  <div className="flex min-w-0 flex-col gap-5">
+                    <section className="overflow-hidden rounded-2xl border" style={{ background: "var(--card)", borderColor: "var(--border)", boxShadow: "var(--shadow-sm)" }} aria-label="Paciente selecionado">
+                      <div className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center" style={{ background: "linear-gradient(120deg, var(--role-soft), var(--card) 70%)" }}>
+                        <Avatar initials={selectedPaciente.avatar} size="lg" tone={riskTone(getPatientRisk(selectedPaciente))} solid />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h2 className="text-lg font-bold" style={{ color: "var(--foreground)" }}>{selectedPaciente.nome}</h2>
+                            <StatusBadge tone={riskTone(getPatientRisk(selectedPaciente))} icon={riskIcon(getPatientRisk(selectedPaciente))} size="sm">{riskLabel(getPatientRisk(selectedPaciente))}</StatusBadge>
                           </div>
-                          <div
-                            className="text-xs truncate mt-0.5"
-                            style={{
-                              color:
-                                selectedPaciente?.id === p.id
-                                  ? "rgba(255,255,255,.7)"
-                                  : "var(--muted-foreground)",
-                            }}
-                          >
-                            {p.leito} · {p.medico}
-                          </div>
+                          <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>Leito {selectedPaciente.leito} · {selectedPaciente.ala} · {selectedPaciente.idade} anos · {selectedPaciente.condicao}</p>
+                          <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>Médico responsável: {selectedPaciente.medico}</p>
                         </div>
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="lg:col-span-2 flex flex-col gap-4">
-                    <div
-                      className="rounded-[var(--radius)] p-5"
-                      style={{
-                        background: "var(--card)",
-                        border: "1px solid var(--border)",
-                      }}
-                    >
-                      <div className="flex items-center justify-between mb-3">
-                        <div>
-                          <h3
-                            className="font-semibold text-sm"
-                            style={{ color: "var(--foreground)" }}
-                          >
-                            Nova observação
-                          </h3>
-                          <p
-                            className="text-[11px] mt-0.5"
-                            style={{ color: "var(--muted-foreground)" }}
-                          >
-                            Para: {selectedPaciente.medico} ·{" "}
-                            {selectedPaciente.nome}
-                          </p>
-                        </div>
-                        <span
-                          className="text-[10px] font-mono"
-                          style={{ color: "var(--primary)" }}
-                        >
-                          {agora}
-                        </span>
                       </div>
+                      {latestVitalsFor(selectedPaciente.id) && (
+                        <div className="grid grid-cols-2 gap-2 border-t p-4 sm:grid-cols-4" style={{ borderColor: "var(--border)" }}>
+                          <VitalTile icon="gauge" label="PA" value={latestVitalsFor(selectedPaciente.id)?.pressao ?? "—"} unit="mmHg" />
+                          <VitalTile icon="heart" label="FC" value={latestVitalsFor(selectedPaciente.id)?.fc ?? "—"} unit="bpm" alert={(latestVitalsFor(selectedPaciente.id)?.fc ?? 0) > 100} />
+                          <VitalTile icon="thermometer" label="Temp." value={latestVitalsFor(selectedPaciente.id)?.temp ?? "—"} unit="°C" alert={(latestVitalsFor(selectedPaciente.id)?.temp ?? 0) >= 38} />
+                          <VitalTile icon="droplet" label="SpO₂" value={latestVitalsFor(selectedPaciente.id)?.spo2 ?? "—"} unit="%" alert={(latestVitalsFor(selectedPaciente.id)?.spo2 ?? 100) < 94} />
+                        </div>
+                      )}
+                    </section>
 
+                    <SectionCard title="Nova observação" description={`Para: ${selectedPaciente.medico}`} icon="send" action={<span className="font-mono text-xs" style={{ color: "var(--muted-foreground)" }}>{agora}</span>}>
+                      <label htmlFor="evolucao-texto" className="mb-1.5 block text-xs font-semibold" style={{ color: "var(--foreground)" }}>Descrição da evolução</label>
                       <textarea
+                        id="evolucao-texto"
                         value={evolucaoTexto}
                         onChange={(e) => setEvolucaoTexto(e.target.value)}
                         rows={6}
                         placeholder="Descreva a evolução clínica, queixas, intercorrências, sinais vitais ou observações relevantes..."
-                        className="w-full p-3 rounded-lg text-xs outline-none resize-none"
-                        style={{
-                          background: "var(--secondary)",
-                          border: "1px solid var(--border)",
-                          color: "var(--foreground)",
-                        }}
+                        className="w-full resize-y rounded-xl border p-3 text-sm outline-none"
+                        style={inputStyle}
                       />
-
-                      <div className="flex items-center justify-between mt-3">
-                        <span
-                          className="text-[10px]"
-                          style={{ color: "var(--muted-foreground)" }}
-                        >
-                          Profissional: {ENFERMEIRA.assinatura}
-                        </span>
-                        <div className="flex flex-wrap gap-2">
+                      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>{evolucaoTexto.trim().length} caracteres · {ENFERMEIRA.assinatura}</span>
+                        <div className="flex flex-wrap items-center gap-2">
                           {evolucaoEnviada && (
-                            <span
-                              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg"
-                              style={{
-                                background: "#E8F8F5",
-                                color: "#007F72",
-                              }}
-                            >
-                              <Icon name="check" size={14} />
-                              Enviado ao médico
+                            <span role="status" className="inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold" style={{ background: "var(--success-surface)", color: "var(--success-foreground)" }}>
+                              <UiIcon name="checkCircle" size={15} /> Enviado ao médico
                             </span>
                           )}
                           <button
+                            type="button"
                             onClick={enviarEvolucao}
                             disabled={!evolucaoTexto.trim()}
-                            className="h-9 px-4 rounded-lg text-xs font-semibold text-white cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
-                            style={{ background: "var(--primary)" }}
+                            className="inline-flex h-11 items-center gap-2 rounded-xl px-5 text-sm font-semibold"
+                            style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
                           >
-                            <Icon name="send" size={14} />
-                            Enviar evolução
+                            <UiIcon name="send" size={15} /> Enviar evolução
                           </button>
                         </div>
                       </div>
-                    </div>
+                    </SectionCard>
 
-                    <div
-                      className="rounded-[var(--radius)] p-5"
-                      style={{
-                        background: "var(--card)",
-                        border: "1px solid var(--border)",
-                      }}
-                    >
-                      <h3
-                        className="font-semibold text-sm mb-3"
-                        style={{ color: "var(--foreground)" }}
-                      >
-                        Últimos registros
-                      </h3>
-                      <div className="flex flex-col gap-3">
-                        {(evolucoesPorPaciente[selectedPaciente.id] ?? []).map(
-                          (rc, i) => (
-                            <div
+                    <SectionCard title="Registros anteriores" description={`${(evolucoesPorPaciente[selectedPaciente.id] ?? []).length} registro(s)`} icon="atividades">
+                      {(evolucoesPorPaciente[selectedPaciente.id] ?? []).length ? (
+                        <ol>
+                          {(evolucoesPorPaciente[selectedPaciente.id] ?? []).map((rc, i, list) => (
+                            <TimelineItem
                               key={i}
-                              className="p-4 rounded-lg"
-                              style={{ background: "var(--secondary)" }}
+                              last={i === list.length - 1}
+                              tone={rc.perfil === "Médico" ? "primary" : "role"}
+                              title={rc.perfil === "Médico" ? "Evolução médica" : "Evolução de enfermagem"}
+                              meta={rc.data}
                             >
-                              <div className="flex items-center justify-between mb-2">
-                                <span
-                                  className="text-xs font-semibold"
-                                  style={{ color: "var(--foreground)" }}
-                                >
-                                  Evolução de enfermagem
-                                </span>
-                                <span
-                                  className="text-[10px] font-mono"
-                                  style={{ color: "var(--muted-foreground)" }}
-                                >
-                                  {rc.data}
-                                </span>
-                              </div>
-                              <p
-                                className="text-xs leading-relaxed"
-                                style={{ color: "var(--muted-foreground)" }}
-                              >
-                                {rc.descricao}
+                              <p style={{ color: "var(--foreground)" }}>{rc.descricao}</p>
+                              <p className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                                <span>{rc.profissional ?? ENFERMEIRA.assinatura}</span>
+                                {rc.perfil !== "Médico" && <StatusBadge tone="success" icon="check" size="sm">Enviado ao médico</StatusBadge>}
                               </p>
-                              <div
-                                className="text-[10px] mt-2"
-                                style={{ color: "var(--muted-foreground)" }}
-                              >
-                                {rc.profissional ?? ENFERMEIRA.assinatura}
-                              </div>
-                            </div>
-                          ),
-                        )}
-                        {(evolucoesPorPaciente[selectedPaciente.id] ?? [])
-                          .length === 0 && (
-                          <p
-                            className="text-xs text-center py-6"
-                            style={{ color: "var(--muted-foreground)" }}
-                          >
-                            Nenhum registro ainda.
-                          </p>
-                        )}
-                      </div>
-                    </div>
+                            </TimelineItem>
+                          ))}
+                        </ol>
+                      ) : (
+                        <EmptyState icon="evolucao" title="Nenhum registro ainda" />
+                      )}
+                    </SectionCard>
                   </div>
-                </div>
-              ) : null}
+                ) : (
+                  <EmptyState icon="evolucao" title="Selecione um paciente" description="Escolha um paciente para registrar a evolução de enfermagem." />
+                )}
+              </div>
             </div>
           )}
 
-          {/* ============ ALERTAS ============ */}
           {activeTab === "atividades" && <ActivityLog />}
 
           {activeTab === "alertas" && (
             <div className="fade-in">
               <PageTitle
                 title="Central de alertas"
-                subtitle={`${alertasPendentes.length + monitoringPendingCount} alerta${
-                  alertasPendentes.length + monitoringPendingCount === 1 ? "" : "s"
-                } pendente${
-                  alertasPendentes.length + monitoringPendingCount === 1 ? "" : "s"
-                } de atendimento`}
+                subtitle={`${alertasPendentes.length + monitoringPendingCount} alerta${alertasPendentes.length + monitoringPendingCount === 1 ? "" : "s"} pendente${alertasPendentes.length + monitoringPendingCount === 1 ? "" : "s"} de atendimento`}
                 action={
                   alertasPendentes.length > 0 ? (
-                    <button
-                      onClick={markAllAlertasRecognized}
-                      className="h-9 px-4 rounded-lg text-xs font-semibold cursor-pointer"
-                      style={{
-                        background: "var(--secondary)",
-                        color: "var(--primary)",
-                        border: "1px solid var(--border)",
-                      }}
-                    >
-                      Reconhecer todos os alertas
+                    <button type="button" onClick={markAllAlertasRecognized} className="inline-flex h-11 items-center gap-1.5 rounded-xl border px-4 text-sm font-semibold" style={{ background: "var(--card)", color: "var(--primary)", borderColor: "var(--border)" }}>
+                      <UiIcon name="check" size={16} /> Reconhecer todos os alertas
                     </button>
                   ) : undefined
+                }
+                meta={
+                  <>
+                    <MetaItem icon="alert" label="Críticos" value={alertasPendentes.filter((alert) => alert.severity === "high").length} tone="danger" />
+                    <MetaItem icon="info" label="Atenção" value={alertasPendentes.filter((alert) => alert.severity === "medium").length} tone="warning" />
+                    <MetaItem icon="monitoramento" label="Monitoramento" value={monitoringPendingCount} tone="info" />
+                  </>
                 }
               />
 
@@ -1815,152 +1292,53 @@ export default function NurseDashboard({
                 onOpenMonitoring={() => setActiveTab("monitoramento")}
               />
 
+              <h2 className="mb-3 text-base font-semibold" style={{ color: "var(--foreground)" }}>Alertas clínicos</h2>
               <div className="grid grid-cols-1 gap-3">
                 {alertasAtivos.map((a) => {
-                  const p = pacientes.find((x) => x.id === a.pacienteId)!
-                  const c = riskColor[a.severity]
+                  const p = pacientes.find((x) => x.id === a.pacienteId)
+                  const tone = riskTone(a.severity)
                   const reconhecido = alertasReconhecidos.includes(a.id)
                   return (
-                    <div
+                    <article
                       key={a.id}
-                      className="rounded-[var(--radius)] p-5 transition-all"
-                      style={{
-                        background: "var(--card)",
-                        border: `1px solid ${
-                          reconhecido ? "var(--border)" : c.dot + "55"
-                        }`,
-                        opacity: reconhecido ? 0.62 : 1,
-                      }}
+                      className="relative overflow-hidden rounded-2xl border p-4 pl-5 sm:p-5 sm:pl-6"
+                      style={{ background: "var(--card)", borderColor: reconhecido ? "var(--border)" : toneStyles[tone].border, opacity: reconhecido ? 0.7 : 1, boxShadow: "var(--shadow-sm)" }}
                     >
-                      <div className="flex items-start gap-4">
-                        <div
-                          className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
-                          style={{ background: c.bg, color: c.text }}
-                        >
-                          <Icon name="alert" size={19} />
+                      <span className="absolute inset-y-0 left-0 w-1.5" style={{ background: reconhecido ? "var(--neutral)" : toneStyles[tone].solid }} aria-hidden="true" />
+                      <div className="flex flex-col gap-4 md:flex-row md:items-center">
+                        <div className="flex min-w-0 flex-1 items-start gap-3">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl" style={{ background: toneStyles[tone].bg, color: toneStyles[tone].fg }} aria-hidden="true">
+                            <UiIcon name="alert" size={19} />
+                          </span>
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <StatusBadge tone={tone} size="sm">{riskLabel(a.severity)}</StatusBadge>
+                              <span className="font-mono text-xs" style={{ color: "var(--muted-foreground)" }}>{a.id}</span>
+                              {reconhecido && <StatusBadge tone="neutral" icon="check" size="sm">Reconhecido pela equipe</StatusBadge>}
+                            </div>
+                            <h3 className="mt-1.5 text-[15px] font-semibold" style={{ color: "var(--foreground)" }}>{a.titulo}</h3>
+                            <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>{p?.nome} · {a.local} · {a.data} · {a.horario}</p>
+                          </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span
-                              className="text-[10px] font-bold uppercase tracking-wide px-2 py-1 rounded-full"
-                              style={{ background: c.bg, color: c.text }}
-                            >
-                              {c.label}
-                            </span>
-                            <span
-                              className="text-[10px] font-mono"
-                              style={{ color: "var(--muted-foreground)" }}
-                            >
-                              {a.id}
-                            </span>
-                            {reconhecido && <span className="rounded-full px-2 py-1 text-[10px] font-semibold" style={{ background: "var(--secondary)", color: "var(--muted-foreground)" }}>Reconhecido pela equipe</span>}
-                          </div>
-                          <h3
-                            className="text-sm font-semibold mt-2"
-                            style={{ color: "var(--foreground)" }}
-                          >
-                            {a.titulo}
-                          </h3>
-                          <p
-                            className="text-xs mt-1"
-                            style={{ color: "var(--muted-foreground)" }}
-                          >
-                            {a.detalhe}
-                          </p>
-
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
-                            <div>
-                              <div
-                                className="text-[9px]"
-                                style={{ color: "var(--muted-foreground)" }}
-                              >
-                                Paciente
-                              </div>
-                              <div
-                                className="text-xs font-semibold mt-1"
-                                style={{ color: "var(--foreground)" }}
-                              >
-                                {p.nome}
-                              </div>
-                            </div>
-                            <div>
-                              <div
-                                className="text-[9px]"
-                                style={{ color: "var(--muted-foreground)" }}
-                              >
-                                Valor
-                              </div>
-                              <div
-                                className="text-xs font-semibold mt-1"
-                                style={{ color: c.text }}
-                              >
-                                {a.valor} {a.label}
-                              </div>
-                            </div>
-                            <div>
-                              <div
-                                className="text-[9px]"
-                                style={{ color: "var(--muted-foreground)" }}
-                              >
-                                Data e horário
-                              </div>
-                              <div
-                                className="text-xs font-medium mt-1"
-                                style={{ color: "var(--foreground)" }}
-                              >
-                                {a.data} · {a.horario}
-                              </div>
-                            </div>
-                            <div>
-                              <div
-                                className="text-[9px]"
-                                style={{ color: "var(--muted-foreground)" }}
-                              >
-                                Local
-                              </div>
-                              <div
-                                className="text-xs font-medium mt-1"
-                                style={{ color: "var(--foreground)" }}
-                              >
-                                {a.local}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div
-                            className="flex flex-wrap gap-2 mt-4 pt-4"
-                            style={{ borderTop: "1px solid var(--border)" }}
-                          >
-                            <button
-                              onClick={() => goToPatient(p.id, "prescricao")}
-                              className="h-8 px-3 rounded-lg text-xs font-semibold text-white cursor-pointer"
-                              style={{ background: "var(--primary)" }}
-                            >
-                              Ver prescrição
-                            </button>
-                            {!reconhecido && (
-                              <button
-                                onClick={() => markAlertRecognized(a.id)}
-                                className="h-8 px-3 rounded-lg text-xs font-semibold cursor-pointer"
-                                style={{
-                                  background: "#E8F8F5",
-                                  color: "#007F72",
-                                  border: "1px solid #00A89633",
-                                }}
-                              >
-                                Reconhecer alerta
-                              </button>
-                            )}
-                          </div>
+                        <div className="flex items-center gap-4 md:flex-col md:items-end md:gap-1">
+                          <p className="text-2xl font-bold leading-none tabular-nums" style={{ color: toneStyles[tone].fg }}>{a.valor}<span className="ml-1 text-xs font-medium" style={{ color: "var(--muted-foreground)" }}>{a.label}</span></p>
+                        </div>
+                        <div className="flex flex-wrap gap-2 md:flex-col">
+                          {p && <button type="button" onClick={() => goToPatient(p.id, "prescricao")} className="min-h-10 rounded-lg px-3 text-xs font-semibold" style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}>Ver prescrição</button>}
+                          {!reconhecido && (
+                            <button type="button" onClick={() => markAlertRecognized(a.id)} className="min-h-10 rounded-lg border px-3 text-xs font-semibold" style={{ background: "var(--card)", color: "var(--foreground)", borderColor: "var(--border)" }}>Reconhecer alerta</button>
+                          )}
                         </div>
                       </div>
-                    </div>
+                    </article>
                   )
                 })}
               </div>
             </div>
           )}
+
         </main>
+        </SectionContext.Provider>
       </div>
     </div>
   )

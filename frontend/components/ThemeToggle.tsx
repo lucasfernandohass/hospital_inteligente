@@ -15,7 +15,7 @@ export default function ThemeToggle({ theme, onToggle, floating = false }: Props
       aria-label={`Ativar tema ${nextTheme === "dark" ? "escuro" : "claro"}`}
       title={`Ativar tema ${nextTheme === "dark" ? "escuro" : "claro"}`}
       onClick={onToggle}
-      className={`flex shrink-0 items-center justify-center border transition-colors ${floating ? "h-14 w-14 rounded-2xl shadow-lg" : "h-10 w-10 rounded-xl"}`}
+      className={`ui-icon-button flex shrink-0 items-center justify-center border ${floating ? "h-14 w-14 rounded-2xl shadow-lg" : "h-11 w-11 rounded-xl xl:h-10 xl:w-10"}`}
       style={{
         background: "var(--card)",
         borderColor: "var(--border)",
