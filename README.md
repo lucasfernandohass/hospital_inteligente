@@ -1,4 +1,4 @@
-# Hospital Inteligente
+qual gasta mais, o 5.6 sol leve ou o 6.1 sol leve?npm run dev# Hospital Inteligente
 
 ![Status](https://img.shields.io/badge/status-Em_desenvolvimento-yellow)
 ![Platform](https://img.shields.io/badge/platform-Web%20%7C%20Mobile-lightgrey)
