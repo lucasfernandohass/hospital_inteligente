@@ -2,17 +2,17 @@ import { useState } from "react"
 import type { Screen } from "../App"
 import logo from "./logo.webp?no-inline"
 import ThemeToggle, { type Theme } from "./ThemeToggle"
-import { logActivity } from "./activityStore"
+import { api, ApiError, roleForScreen, type AuthSession } from "../services/api"
 
 interface Props {
-  onNavigate: (screen: Screen) => void
+  onLogin: (session: AuthSession) => void
   /** Chamado ao escolher o perfil (usado para pré-carregar o painel). */
   onRoleSelect?: (screen: Screen) => void
   theme: Theme
   onToggleTheme: () => void
 }
 
-type Role = "doutor" | "enfermeira" | "recepcionista" | null
+type Role = "administrador" | "doutor" | "enfermeira" | "recepcionista" | null
 
 const roles: {
   key: Role
@@ -22,24 +22,31 @@ const roles: {
   description: string
 }[] = [
   {
+    key: "administrador",
+    label: "Administrador",
+    placeholder: "seu.email@hospital.br",
+    name: "Conta administradora",
+    description: "Gestão de acessos",
+  },
+  {
     key: "doutor",
     label: "Médico",
-    placeholder: "pedro.campos@hospital.br",
-    name: "Dr. Pedro Campos",
+    placeholder: "seu.email@hospital.br",
+    name: "Conta médica",
     description: "Prontuários e prescrições",
   },
   {
     key: "enfermeira",
     label: "Enfermeira",
-    placeholder: "ana.dias@hospital.br",
-    name: "Enf. Ana Dias",
+    placeholder: "seu.email@hospital.br",
+    name: "Conta de enfermagem",
     description: "Cuidados e medicação",
   },
   {
     key: "recepcionista",
     label: "Recepcionista",
-    placeholder: "monica.@hospital.br",
-    name: "Mônica Rodriguês",
+    placeholder: "seu.email@hospital.br",
+    name: "Conta de recepção",
     description: "Cadastros, leitos e agenda",
   },
 ]
@@ -71,6 +78,13 @@ const RoleIcon = ({ role }: { role: Role }) => {
         <path d="M3.2 12h4.3l1.5-3 2 6 1.5-3h3" />
       </svg>
     )
+  if (role === "administrador")
+    return (
+      <svg {...common}>
+        <path d="M12 3 4 6v5c0 5 3.4 8.5 8 10 4.6-1.5 8-5 8-10V6l-8-3Z" />
+        <path d="m9 12 2 2 4-4" />
+      </svg>
+    )
   return (
     <svg {...common}>
       <rect x="3" y="5" width="18" height="16" rx="2" />
@@ -95,7 +109,7 @@ const FieldIcon = ({ name }: { name: "mail" | "lock" }) => (
   </svg>
 )
 
-export default function LoginPage({ onNavigate, onRoleSelect, theme, onToggleTheme }: Props) {
+export default function LoginPage({ onLogin, onRoleSelect, theme, onToggleTheme }: Props) {
   const [role, setRole] = useState<Role>(null)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -111,17 +125,24 @@ export default function LoginPage({ onNavigate, onRoleSelect, theme, onToggleThe
   const podeEntrar =
     role !== null && email.trim().length > 0 && password.trim().length > 0
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!role || !podeEntrar) return
     setLoading(true)
-    setTimeout(() => {
+    setLoginNotice("")
+    try {
+      const authenticated = await api.login(email.trim(), password)
+      const expectedRole = roleForScreen(role)
+      if (authenticated.role !== expectedRole) {
+        setLoading(false)
+        setLoginNotice(`Esta conta possui perfil ${authenticated.role}, diferente do perfil selecionado.`)
+        return
+      }
+      onLogin(authenticated)
+    } catch (error) {
       setLoading(false)
-      logActivity(selectedRole?.label ?? "Equipe", "Sessão iniciada", "Acesso demonstrativo", "Login de demonstração")
-      if (role === "doutor") onNavigate("doutor")
-      else if (role === "enfermeira") onNavigate("enfermeira")
-      else onNavigate("recepcionista")
-    }, 900)
+      setLoginNotice(error instanceof ApiError ? error.message : "Não foi possível autenticar.")
+    }
   }
 
   const inputStyle = {
@@ -242,7 +263,7 @@ export default function LoginPage({ onNavigate, onRoleSelect, theme, onToggleThe
               <legend className="mb-2.5 text-xs font-semibold" style={{ color: "var(--foreground)" }}>
                 Perfil de acesso
               </legend>
-              <div className="grid grid-cols-3 gap-2 sm:gap-3" role="radiogroup" aria-label="Perfil de acesso">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3" role="radiogroup" aria-label="Perfil de acesso">
                 {roles.map((r) => {
                   const active = role === r.key
                   return (
@@ -414,8 +435,8 @@ export default function LoginPage({ onNavigate, onRoleSelect, theme, onToggleThe
             )}
           </div>
 
-          <p className="mt-6 text-center text-xs leading-relaxed" style={{ color: "var(--muted-foreground)" }}>
-            Ambiente demonstrativo sem autenticação no servidor.{" "}
+      <p className="mt-6 text-center text-xs leading-relaxed" style={{ color: "var(--muted-foreground)" }}>
+            Acesso autenticado pela API. O painel e as permissões são definidos pelo perfil da conta.{" "}
             <button
               type="button"
               onClick={() => setLoginNotice("Solicitações de acesso ainda não são recebidas pelo protótipo. Use um perfil demonstrativo para navegar.")}

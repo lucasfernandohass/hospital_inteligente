@@ -2,8 +2,39 @@ import { Component, Suspense, lazy, useEffect, useState } from "react"
 import type { ReactNode } from "react"
 import LoginPage from "./components/LoginPage"
 import type { Theme } from "./components/ThemeToggle"
+import AdminDashboard from "./components/AdminDashboard"
+import { roleForScreen, screenForRole, type AuthSession } from "./services/api"
+import { pathForPanel, type PanelSection } from "./hooks/usePanelRoute"
 
-export type Screen = "login" | "doutor" | "enfermeira" | "recepcionista"
+export type Screen = "login" | "administrador" | "doutor" | "enfermeira" | "recepcionista"
+const SESSION_KEY = "inteliHosp-session"
+const panelByScreen: Record<Exclude<Screen, "login">, { section: PanelSection; firstPage: string }> = {
+  administrador: { section: "administrador", firstPage: "equipe" },
+  doutor: { section: "medico", firstPage: "overview" },
+  enfermeira: { section: "enfermagem", firstPage: "internados" },
+  recepcionista: { section: "recepcao", firstPage: "recepcao" },
+}
+
+function screenForPath(pathname: string): Screen | null {
+  const section = pathname.split("/").filter(Boolean)[1]
+  return ({ administrador: "administrador", medico: "doutor", enfermagem: "enfermeira", recepcao: "recepcionista" } as Record<string, Exclude<Screen, "login">>)[section] ?? null
+}
+
+function pathForScreen(screen: Screen) {
+  if (screen === "login") return "/login"
+  const route = panelByScreen[screen]
+  return pathForPanel(route.section, route.firstPage)
+}
+
+function readSession(): AuthSession | null {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<AuthSession>
+    if (!parsed.token || !parsed.nome || !parsed.email || !parsed.role || !["RECEPCIONISTA", "MEDICO", "ENFERMEIRA", "ADMINISTRADOR"].includes(parsed.role)) return null
+    return parsed as AuthSession
+  } catch { return null }
+}
 
 // Cada painel é carregado sob demanda (chunk próprio no build).
 const dashboardLoaders = {
@@ -25,7 +56,7 @@ function readRetryScreen(): Screen {
   try {
     const saved = sessionStorage.getItem(RETRY_SCREEN_KEY)
     sessionStorage.removeItem(RETRY_SCREEN_KEY)
-    return saved === "doutor" || saved === "enfermeira" || saved === "recepcionista" ? saved : "login"
+    return saved === "administrador" || saved === "doutor" || saved === "enfermeira" || saved === "recepcionista" ? saved : "login"
   } catch {
     return "login"
   }
@@ -41,11 +72,16 @@ function retryDashboard(screen: Screen) {
 }
 
 /** Mostra uma tela de erro se o painel não puder ser carregado (sem tentativas automáticas). */
-class DashboardErrorBoundary extends Component<{ children: ReactNode; onRetry: () => void; onBack: () => void }, { failed: boolean }> {
-  state = { failed: false }
+class DashboardErrorBoundary extends Component<{ children: ReactNode; onRetry: () => void; onBack: () => void }, { failed: boolean; message: string }> {
+  state = { failed: false, message: "" }
 
   static getDerivedStateFromError() {
-    return { failed: true }
+    return { failed: true, message: "" }
+  }
+
+  componentDidCatch(error: Error) {
+    console.error("Falha ao renderizar o painel:", error)
+    this.setState({ message: error.message })
   }
 
   render() {
@@ -58,6 +94,7 @@ class DashboardErrorBoundary extends Component<{ children: ReactNode; onRetry: (
           </span>
           <h1 className="mt-4 text-lg font-bold" style={{ color: "var(--foreground)" }}>Não foi possível carregar o painel</h1>
           <p className="mt-1 text-sm" style={{ color: "var(--muted-foreground)" }}>Verifique a conexão e tente novamente.</p>
+          {import.meta.env.DEV && this.state.message && <pre className="mt-3 overflow-auto rounded-lg p-3 text-left text-xs" style={{ background: "var(--secondary)", color: "var(--foreground)" }}>{this.state.message}</pre>}
           <div className="mt-5 flex flex-col gap-2">
             <button type="button" onClick={this.props.onRetry} className="min-h-11 rounded-xl px-4 text-sm font-semibold" style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}>
               Tentar novamente
@@ -74,7 +111,7 @@ class DashboardErrorBoundary extends Component<{ children: ReactNode; onRetry: (
 
 /** Antecipa o download do painel escolhido no login (sem alterar o fluxo). */
 function prefetchDashboard(screen: Screen) {
-  if (screen !== "login") void dashboardLoaders[screen]().catch(() => undefined)
+  if (screen !== "login" && screen !== "administrador") void dashboardLoaders[screen]().catch(() => undefined)
 }
 
 function DashboardFallback() {
@@ -97,7 +134,14 @@ function DashboardFallback() {
 }
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>(readRetryScreen)
+  const [session, setSession] = useState<AuthSession | null>(readSession)
+  const [screen, setScreen] = useState<Screen>(() => {
+    readRetryScreen()
+    const authenticated = readSession()
+    if (!authenticated) return "login"
+    const allowedScreen = screenForRole(authenticated.role)
+    return screenForPath(window.location.pathname) === allowedScreen ? allowedScreen : allowedScreen
+  })
   const [theme, setTheme] = useState<Theme>(() => {
     try {
       return localStorage.getItem("inteliHosp-theme") === "dark" ? "dark" : "light"
@@ -116,8 +160,42 @@ export default function App() {
     }
   }, [theme])
 
+  useEffect(() => {
+    const syncRoute = () => {
+      const authenticated = readSession()
+      if (!authenticated) {
+        if (window.location.pathname !== "/login") window.history.replaceState({}, "", "/login")
+        setScreen("login")
+        return
+      }
+      const allowedScreen = screenForRole(authenticated.role)
+      const requestedScreen = screenForPath(window.location.pathname)
+      if (requestedScreen !== allowedScreen) {
+        const defaultPath = pathForScreen(allowedScreen)
+        window.history.replaceState({}, "", defaultPath)
+      }
+      setScreen(allowedScreen)
+    }
+    window.addEventListener("popstate", syncRoute)
+    syncRoute()
+    return () => window.removeEventListener("popstate", syncRoute)
+  }, [])
+
   const navigate = (next: Screen) => {
+    if (next === "login") {
+      sessionStorage.removeItem(SESSION_KEY)
+      setSession(null)
+    }
+    window.history.pushState({}, "", pathForScreen(next))
     setScreen(next)
+    setAnimKey((k) => k + 1)
+  }
+
+  const handleLogin = (authenticated: AuthSession) => {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(authenticated))
+    window.history.pushState({}, "", pathForScreen(screenForRole(authenticated.role)))
+    setSession(authenticated)
+    setScreen(screenForRole(authenticated.role))
     setAnimKey((k) => k + 1)
   }
 
@@ -129,7 +207,7 @@ export default function App() {
       <div key={animKey} className="screen-enter">
         {screen === "login" && (
           <LoginPage
-            onNavigate={navigate}
+            onLogin={handleLogin}
             onRoleSelect={prefetchDashboard}
             theme={theme}
             onToggleTheme={toggleTheme}
@@ -141,6 +219,8 @@ export default function App() {
           {screen === "doutor" && (
             <DoutorDashboard
               onNavigate={navigate}
+              token={session?.token ?? ""}
+              userName={session?.nome ?? ""}
               theme={theme}
               onToggleTheme={toggleTheme}
             />
@@ -148,6 +228,9 @@ export default function App() {
           {screen === "enfermeira" && (
             <EnfermeiraDashboard
               onNavigate={navigate}
+              token={session?.token ?? ""}
+              userName={session?.nome ?? ""}
+              userId={session?.id ?? 0}
               theme={theme}
               onToggleTheme={toggleTheme}
             />
@@ -155,9 +238,14 @@ export default function App() {
           {screen === "recepcionista" && (
             <RecepcionistaDashboard
               onNavigate={navigate}
+              token={session?.token ?? ""}
+              userName={session?.nome ?? ""}
               theme={theme}
               onToggleTheme={toggleTheme}
             />
+          )}
+          {screen === "administrador" && session?.role === "ADMINISTRADOR" && (
+            <AdminDashboard session={session} onLogout={() => navigate("login")} theme={theme} onToggleTheme={toggleTheme} />
           )}
         </Suspense>
         </DashboardErrorBoundary>

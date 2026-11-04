@@ -6,35 +6,30 @@ import { greeting } from "./dateUtils"
 import logo from "./logo.webp?no-inline"
 import type { Theme } from "./ThemeToggle"
 import useLocalStorageState from "./useLocalStorageState"
-import StaffManagement from "./StaffManagement"
 import ActivityLog from "./ActivityLog"
 import { logActivity } from "./activityStore"
-import { addLocalDaysToDateInput, APPOINTMENT_STORAGE_KEY, DOCTOR_DEMO_ID, formatLongLocalDate, includeDoctorDemoAppointments, initialReceptionAppointments, localDateInputValue, type ReceptionAppointment } from "./appointmentStore"
-import { BED_STORAGE_KEY, initialHospitalSectors, initialRegisteredBeds, initialRegisteredPatients, normalizeRegisteredBeds, PATIENT_STORAGE_KEY, type RegisteredBed, type RegisteredPatient } from "./patientStore"
-import { initialProfessionals, PROFESSIONAL_STORAGE_KEY, type Professional } from "./professionalStore"
-import { HOSPITALIZATION_STORAGE_KEY, type Hospitalization } from "./hospitalizationStore"
-import { EXAM_STORAGE_KEY, type SharedExamRequest } from "./examStore"
+import { formatLongLocalDate, localDateInputValue, type ReceptionAppointment } from "./appointmentStore"
+import { initialHospitalSectors, type RegisteredBed, type RegisteredPatient } from "./patientStore"
+import type { Hospitalization } from "./hospitalizationStore"
+import type { SharedExamRequest } from "./examStore"
+import { usePanelRoute } from "../hooks/usePanelRoute"
+import { api, ApiError, type DoctorDto, type InternmentDto } from "../services/api"
+import { mapAppointment, mapBed, mapInternment, mapPatient } from "../services/mappers"
 
 interface Props {
   onNavigate: (screen: Screen) => void
+  token: string
+  userName: string
   theme: Theme
   onToggleTheme: () => void
 }
 
-type Tab = "recepcao" | "cadastro-paciente" | "consulta-paciente" | "equipe" | "atividades" | "cadastro-leito" | "mapa-leitos" | "internacao" | "agendamento" | "ficha"
+type Tab = "recepcao" | "cadastro-paciente" | "consulta-paciente" | "atividades" | "cadastro-leito" | "mapa-leitos" | "internacao" | "agendamento" | "ficha"
 
-
-const RECEPCIONISTA = {
-  nome: "Mônica Rodrigues",
-  iniciais: "MR",
-  cargo: "Recepcionista",
-  registro: "Mat. 88.421",
-}
 
 // ---------------------------------------------------------------------------
 // Dados base
 // ---------------------------------------------------------------------------
-const pacientesIniciais = initialRegisteredPatients
 
 const historicoAtendimentos: Record<string, {
   data: string
@@ -94,13 +89,6 @@ const historicoAtendimentos: Record<string, {
 type Leito = RegisteredBed
 
 // Agenda de médicos
-const medicos = [
-  { id: DOCTOR_DEMO_ID, nome: "Dr. Pedro Campos", especialidade: "Clínica Médica" },
-  { id: "MED-1", nome: "Dr. Rafael Oliveira", especialidade: "Cardiologia" },
-  { id: "MED-2", nome: "Dra. Fernanda Lima", especialidade: "Pneumologia" },
-  { id: "MED-3", nome: "Dr. Bruno Tavares", especialidade: "Clínica Geral" },
-]
-
 const horariosDisponiveis = [
   "08:00",
   "08:30",
@@ -120,8 +108,6 @@ const horariosDisponiveis = [
   "16:30",
 ]
 
-const demoToday = localDateInputValue()
-const demoTomorrow = addLocalDaysToDateInput(1)
 
 // Agendamentos já ocupados
 const tiposExame = [
@@ -133,40 +119,7 @@ const tiposExame = [
   "Ressonância",
 ]
 
-const examesAgendados = [
-  {
-    id: "EX-001",
-    paciente: "João da Silva",
-    exame: "Hemograma Completo",
-    data: demoToday,
-    hora: "08:30",
-    setor: "Laboratório",
-  },
-  {
-    id: "EX-002",
-    paciente: "Maria Fernanda Souza",
-    exame: "Ultrassom Abdominal",
-    data: demoToday,
-    hora: "11:00",
-    setor: "Imagem",
-  },
-  {
-    id: "EX-003",
-    paciente: "Carlos Alberto Mendes",
-    exame: "Raio-X de Tórax",
-    data: demoToday,
-    hora: "13:30",
-    setor: "Imagem",
-  },
-  {
-    id: "EX-004",
-    paciente: "Ana Beatriz Lima",
-    exame: "ECG",
-    data: demoTomorrow,
-    hora: "09:00",
-    setor: "Cardiologia",
-  },
-]
+const examesAgendados: { id: string; paciente: string; exame: string; data: string; hora: string; setor: string }[] = []
 
 // ---------------------------------------------------------------------------
 // Validação de CPF (algoritmo oficial)
@@ -210,33 +163,17 @@ function formatarTelefone(valor: string): string {
 
 export default function ReceptionistDashboard({
   onNavigate,
+  token,
+  userName,
   theme,
   onToggleTheme,
 }: Props) {
-  const [activeTab, setActiveTab] = useState<Tab>("recepcao")
-  const [pacientesCadastrados, setPacientesCadastrados] = useLocalStorageState(PATIENT_STORAGE_KEY, pacientesIniciais)
-  const [profissionais, setProfissionais] = useLocalStorageState<Professional[]>(PROFESSIONAL_STORAGE_KEY, initialProfessionals)
-  const medicosDisponiveis = useMemo(() => {
-    const knownNames = new Set(
-      medicos.map((doctor) =>
-        doctor.nome.replace(/^(Dr\.|Dra\.)\s*/i, "").toLocaleLowerCase("pt-BR"),
-      ),
-    )
-    const novosMedicos = profissionais
-      .filter((professional) => professional.active && professional.role === "Médico")
-      .filter(
-        (professional) =>
-          !knownNames.has(
-            professional.name.replace(/^(Dr\.|Dra\.)\s*/i, "").toLocaleLowerCase("pt-BR"),
-          ),
-      )
-      .map((professional) => ({
-        id: professional.id,
-        nome: professional.name,
-        especialidade: professional.specialty || "Especialidade não informada",
-      }))
-    return [...medicos, ...novosMedicos]
-  }, [profissionais])
+  const [activeTab, setActiveTab] = usePanelRoute("recepcao", ["recepcao", "cadastro-paciente", "consulta-paciente", "atividades", "cadastro-leito", "mapa-leitos", "internacao", "agendamento", "ficha"] as const, "recepcao")
+  const [pacientesCadastrados, setPacientesCadastrados] = useState<RegisteredPatient[]>([])
+  const [medicosDisponiveis, setMedicosDisponiveis] = useState<DoctorDto[]>([])
+  const [apiLoading, setApiLoading] = useState(true)
+  const [apiError, setApiError] = useState("")
+  const receptionistInitials = userName.split(" ").filter(Boolean).map((part) => part[0]).slice(0, 2).join("").toUpperCase()
 
   // ----------------------------------------------------------
   // Cadastro de paciente
@@ -264,8 +201,7 @@ export default function ReceptionistDashboard({
   // ----------------------------------------------------------
   // Cadastro de leito
   // ----------------------------------------------------------
-  const [leitos, setLeitos] = useLocalStorageState<Leito[]>(BED_STORAGE_KEY, initialRegisteredBeds)
-  useEffect(() => setLeitos((current) => normalizeRegisteredBeds(current)), [setLeitos])
+  const [leitos, setLeitos] = useState<Leito[]>([])
   const [formLeito, setFormLeito] = useState({
     numero: "",
     andar: "1º andar",
@@ -295,22 +231,41 @@ export default function ReceptionistDashboard({
   })
   const [internacaoSucesso, setInternacaoSucesso] = useState(false)
   const [internacaoError, setInternacaoError] = useState("")
-  const [internacoesLocais, setInternacoesLocais] = useLocalStorageState<Hospitalization[]>(HOSPITALIZATION_STORAGE_KEY, [])
+  const [internacoesLocais, setInternacoesLocais] = useState<Hospitalization[]>([])
   const [altaEmConfirmacaoId, setAltaEmConfirmacaoId] = useState<string | null>(null)
 
   // ----------------------------------------------------------
   // Agendamento
   // ----------------------------------------------------------
-  const [agendamentos, setAgendamentos] = useLocalStorageState<ReceptionAppointment[]>(APPOINTMENT_STORAGE_KEY, initialReceptionAppointments)
-  useEffect(() => setAgendamentos((current) => includeDoctorDemoAppointments(current)), [setAgendamentos])
+  const [agendamentos, setAgendamentos] = useState<ReceptionAppointment[]>([])
   const [formAgendamento, setFormAgendamento] = useState({
-    medicoId: DOCTOR_DEMO_ID,
+    medicoId: "",
     data: localDateInputValue(),
     hora: "",
     pacienteId: "",
   })
   const [agendamentoSucesso, setAgendamentoSucesso] = useState(false)
-  const [examesSolicitados, setExamesSolicitados] = useLocalStorageState<SharedExamRequest[]>(EXAM_STORAGE_KEY, [])
+  const [examesSolicitados, setExamesSolicitados] = useState<SharedExamRequest[]>([])
+
+  const loadReceptionData = async () => {
+    setApiLoading(true)
+    try {
+      const [patientsDto, bedsDto, internmentsDto, appointmentsDto, doctors] = await Promise.all([
+        api.listPatients(token), api.listBeds(token), api.listInternments(token), api.listAppointments(token), api.listDoctors(token),
+      ])
+      const patients = patientsDto.map(mapPatient)
+      setPacientesCadastrados(patients)
+      setLeitos(bedsDto.map((bed) => mapBed(bed, internmentsDto)))
+      setInternacoesLocais(internmentsDto.map((internment) => mapInternment(internment, bedsDto, doctors)))
+      setAgendamentos(appointmentsDto.map((appointment) => mapAppointment(appointment, patients)))
+      setMedicosDisponiveis(doctors)
+      setFormAgendamento((current) => ({ ...current, medicoId: current.medicoId || String(doctors[0]?.id ?? "") }))
+      setApiError("")
+    } catch (error) {
+      setApiError(error instanceof ApiError ? error.message : "Não foi possível carregar os dados da recepção.")
+    } finally { setApiLoading(false) }
+  }
+  useEffect(() => { void loadReceptionData() }, [token])
 
   // ----------------------------------------------------------
   // Ficha de atendimento
@@ -395,12 +350,16 @@ export default function ReceptionistDashboard({
   // ----------------------------------------------------------
   // Handlers
   // ----------------------------------------------------------
-  const handleCadastroPaciente = () => {
+  const handleCadastroPaciente = async () => {
     if (!podeCadastrar) return
-    const novoPaciente = {
-      id: "PAC-" + String(Math.max(0, ...pacientesCadastrados.map((patient) => Number(patient.id.replace(/\D/g, "")))) + 1).padStart(3, "0"),
-      ...formPaciente,
-    }
+    setApiError("")
+    try {
+      const created = await api.createPatient({
+        nome: formPaciente.nome.trim(), cpf: formPaciente.cpf.replace(/\D/g, ""),
+        dataNascimento: formPaciente.dataNasc, telefone: formPaciente.telefone,
+        endereco: "", numeroProntuario: `PR-${Date.now()}`, convenio: formPaciente.convenio.trim(), sexo: formPaciente.sexo,
+      }, token)
+      const novoPaciente = mapPatient(created)
     setPacientesCadastrados((current) => [...current, novoPaciente])
     setPacienteEncontrado(novoPaciente)
     logActivity("Recepção", "Cadastro concluído", "Paciente", novoPaciente.id)
@@ -418,6 +377,7 @@ export default function ReceptionistDashboard({
         sexo: "",
       })
     }, 2500)
+    } catch (error) { setApiError(error instanceof ApiError ? error.message : "Não foi possível cadastrar o paciente.") }
   }
 
   const handleBuscarPaciente = () => {
@@ -433,31 +393,36 @@ export default function ReceptionistDashboard({
     setEditForm(null)
   }
 
-  const handleSalvarEdicaoPaciente = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSalvarEdicaoPaciente = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!pacienteEncontrado || !editForm) return
-    const atualizado = { ...pacienteEncontrado, ...editForm }
+    setApiError("")
+    try {
+    const current = await api.getPatient(Number(pacienteEncontrado.id), token)
+    const atualizadoDto = await api.updatePatient(current.id, {
+      nome: editForm.nome.trim(), cpf: current.cpf, dataNascimento: editForm.dataNasc.split("/").reverse().join("-"),
+      endereco: current.endereco ?? "", numeroProntuario: current.numeroProntuario, convenio: editForm.convenio, sexo: editForm.sexo,
+      telefone: editForm.telefone,
+    }, token)
+    const atualizado = mapPatient(atualizadoDto)
     setPacientesCadastrados((current) => current.map((patient) => patient.id === atualizado.id ? atualizado : patient))
     setPacienteEncontrado(atualizado)
     setEditForm(null)
     logActivity("Recepção", "Cadastro atualizado", "Paciente", atualizado.id)
+    } catch (error) { setApiError(error instanceof ApiError ? error.message : "Não foi possível atualizar o paciente.") }
   }
 
-  const handleCadastroLeito = () => {
+  const handleCadastroLeito = async () => {
     const numero = formLeito.numero.trim().toLocaleUpperCase("pt-BR")
     if (!numero) return
     if (leitos.some((bed) => bed.numero.toLocaleUpperCase("pt-BR") === numero)) {
       setLeitoError("Já existe um leito com esse número.")
       return
     }
-    const novo: Leito = {
-      id: `L-${String(leitos.length + 1).padStart(3, "0")}`,
-      numero,
-      andar: formLeito.andar,
-      setor: formLeito.setor,
-      tipo: formLeito.tipo,
-      status: "Disponível",
-    }
+    setApiError("")
+    try {
+    const created = await api.createBed({ numero, andar: Number(formLeito.andar.match(/\d+/)?.[0] ?? 1), quarto: numero, setor: formLeito.setor, tipo: formLeito.tipo, status: "Disponível", observacao: null }, token)
+    const novo = mapBed(created)
     setLeitos((current) => [...current, novo])
     logActivity("Recepção", "Cadastro concluído", "Leito", `${novo.id} · ${novo.numero} · ${novo.setor} · ${novo.andar}`)
     setLeitoError("")
@@ -466,16 +431,21 @@ export default function ReceptionistDashboard({
       setLeitoSucesso(false)
       setFormLeito({ numero: "", andar: "1º andar", setor: "Clínica Médica", tipo: "Enfermaria" })
     }, 2500)
+    } catch (error) { setApiError(error instanceof ApiError ? error.message : "Não foi possível cadastrar o leito.") }
   }
 
-  const handleLiberarLeito = (leitoId: string) => {
+  const handleLiberarLeito = async (leitoId: string) => {
     const leito = leitos.find((item) => item.id === leitoId)
     if (!leito || leito.status !== "Higienização") return
-    setLeitos((current) => current.map((item) => item.id === leitoId ? { ...item, status: "Disponível" } : item))
+    try {
+      const current = await api.getBed(Number(leitoId), token)
+      const updated = await api.updateBed(current.id, { ...current, status: "Disponível" }, token)
+      setLeitos((items) => items.map((item) => item.id === leitoId ? mapBed(updated) : item))
+    } catch (error) { setApiError(error instanceof ApiError ? error.message : "Não foi possível atualizar o leito."); return }
     logActivity("Recepção", "Leito liberado após higienização", "Leito", `${leito.numero} · ${leito.andar}`)
   }
 
-  const handleCadastroInternacao = () => {
+  const handleCadastroInternacao = async () => {
     if (
       !formInternacao.pacienteId ||
       !formInternacao.leitoId ||
@@ -484,7 +454,6 @@ export default function ReceptionistDashboard({
       return
     const paciente = pacientesCadastrados.find((item) => item.id === formInternacao.pacienteId)
     const leitoSelecionado = leitos.find((item) => item.id === formInternacao.leitoId)
-    const medico = medicosDisponiveis.find((item) => item.id === formInternacao.medicoId)
     if (!paciente || !leitoSelecionado || leitoSelecionado.status !== "Disponível") {
       setInternacaoError("O paciente ou leito selecionado não está mais disponível.")
       return
@@ -493,27 +462,13 @@ export default function ReceptionistDashboard({
       setInternacaoError("Este paciente já possui um leito ocupado.")
       return
     }
-    const admission: Hospitalization = {
-      id: "INT-LOCAL-" + Date.now(),
-      pacienteId: paciente.id,
-      leitoId: leitoSelecionado.id,
-      leito: leitoSelecionado.numero,
-      setor: leitoSelecionado.setor || leitoSelecionado.tipo,
-      motivo: formInternacao.motivo.trim(),
-      medicoId: formInternacao.medicoId,
-      medico: medico?.nome ?? "Equipe médica",
-      dataEntrada: new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(new Date()),
-      dataAltaPrevista: "A definir",
-      status: "Ativa",
-    }
+    setApiError("")
+    try {
+    if (!formInternacao.medicoId) { setInternacaoError("Selecione o médico responsável."); return }
+    const created = await api.createInternment({ pacienteId: Number(paciente.id), leitoId: Number(leitoSelecionado.id), medicoId: Number(formInternacao.medicoId), dataInternacao: localDateInputValue(), dataPrevistaAlta: null, dataAlta: null, motivo: formInternacao.motivo.trim(), status: "ATIVA", observacoes: null }, token)
+    const admission = mapInternment(created, await api.listBeds(token), medicosDisponiveis)
     setInternacoesLocais((current) => [admission, ...current])
-    setLeitos((current) =>
-      current.map((l) =>
-        l.id === formInternacao.leitoId
-          ? { ...l, status: "Ocupado", pacienteId: formInternacao.pacienteId }
-          : l,
-      ),
-    )
+    setLeitos((current) => current.map((bed) => bed.id === leitoSelecionado.id ? { ...bed, status: "Ocupado", pacienteId: paciente.id } : bed))
     logActivity("Recepção", "Internação registrada", paciente.id, `${admission.id} · Leito ${admission.leito} · ${admission.motivo}`)
     setInternacaoError("")
     setInternacaoSucesso(true)
@@ -526,20 +481,29 @@ export default function ReceptionistDashboard({
         medicoId: "",
       })
     }, 2500)
+    } catch (error) { setApiError(error instanceof ApiError ? error.message : "Não foi possível registrar a internação.") }
   }
 
-  const handleConfirmarAlta = (leitoId: string) => {
+  const handleConfirmarAlta = async (leitoId: string) => {
     const leito = leitos.find((item) => item.id === leitoId)
     if (!leito || leito.status !== "Ocupado") return
     const pacienteId = leito.pacienteId ?? ""
     const dataAlta = new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(new Date())
-    setInternacoesLocais((current) => current.map((item) => item.leitoId === leitoId && item.status === "Ativa" ? { ...item, status: "Alta", dataAlta } : item))
-    setLeitos((current) => current.map((item) => item.id === leitoId ? { ...item, status: "Higienização", pacienteId: undefined } : item))
+    const admission = internacoesLocais.find((item) => item.leitoId === leitoId && item.status === "Ativa")
+    if (!admission) return
+    try {
+      const current = await api.listInternments(token)
+      const dto = current.find((item) => String(item.id) === admission.id)
+      if (!dto) throw new Error("Internação não encontrada na API.")
+      await api.updateInternment(dto.id, { ...dto, dataAlta: localDateInputValue(), status: "ALTA" }, token)
+      setInternacoesLocais((items) => items.map((item) => item.id === admission.id ? { ...item, status: "Alta", dataAlta } : item))
+      setLeitos((items) => items.map((item) => item.id === leitoId ? { ...item, status: "Higienização", pacienteId: undefined } : item))
+    } catch (error) { setApiError(error instanceof ApiError ? error.message : "Não foi possível registrar a alta."); return }
     logActivity("Recepção", "Alta registrada", pacienteId, `Leito ${leito.numero} · ${dataAlta}`)
     setAltaEmConfirmacaoId(null)
   }
 
-  const handleAgendamento = () => {
+  const handleAgendamento = async () => {
     if (
       !formAgendamento.hora ||
       !formAgendamento.pacienteId ||
@@ -549,27 +513,23 @@ export default function ReceptionistDashboard({
     const paciente = pacientesCadastrados.find(
       (p) => p.id === formAgendamento.pacienteId,
     )
-    const novo = {
-      id: `AG-${String(agendamentos.length + 1).padStart(3, "0")}`,
-      medicoId: formAgendamento.medicoId,
-      data: formAgendamento.data,
-      hora: formAgendamento.hora,
-      paciente: paciente?.nome ?? "",
-      pacienteId: formAgendamento.pacienteId,
-      status: "Agendada" as const,
-    }
+    if (!formAgendamento.medicoId || !paciente) { setApiError("Cadastre um médico antes de criar agendamentos."); return }
+    try {
+    const created = await api.createAppointment({ pacienteId: Number(formAgendamento.pacienteId), medicoId: Number(formAgendamento.medicoId), data: formAgendamento.data, horario: formAgendamento.hora, duracao: 30, status: "AGENDADA", tipo: "Consulta", observacoes: null }, token)
+    const novo = mapAppointment(created, pacientesCadastrados)
     setAgendamentos((current) => [...current, novo])
     logActivity("Recepção", "Agendamento criado", "Consulta", `${novo.id} · ${formAgendamento.pacienteId} · ${novo.data} ${novo.hora}`)
     setAgendamentoSucesso(true)
     setTimeout(() => {
       setAgendamentoSucesso(false)
       setFormAgendamento({
-        medicoId: DOCTOR_DEMO_ID,
+        medicoId: String(medicosDisponiveis[0]?.id ?? ""),
         data: localDateInputValue(),
         hora: "",
         pacienteId: "",
       })
     }, 2500)
+    } catch (error) { setApiError(error instanceof ApiError ? error.message : "Não foi possível criar o agendamento.") }
   }
 
   const handleIniciarExame = (examId: string) => {
@@ -589,7 +549,6 @@ export default function ReceptionistDashboard({
     { key: "mapa-leitos", label: "Mapa de Leitos", group: "Leitos" },
     { key: "internacao", label: "Internação", group: "Leitos" },
     { key: "cadastro-leito", label: "Cadastrar Leito", group: "Leitos" },
-    { key: "equipe", label: "Equipe e Profissionais", group: "Administração" },
     { key: "atividades", label: "Registro de Atividades", group: "Administração" },
   ]
   const activeTabInfo = tabs.find((tab) => tab.key === activeTab)
@@ -600,7 +559,7 @@ export default function ReceptionistDashboard({
   const limiteAtendimentosCelular = summaryLimit(consultasHoje.length, 3)
   const limiteMedicosCelular = summaryLimit(medicosDisponiveis.length, 2)
   const limiteExamesCelular = summaryLimit(examesAgendados.length + examesDaRecepcao.length, 3)
-  const medicoPorId = (id: string) => medicosDisponiveis.find((doctor) => doctor.id === id)
+  const medicoPorId = (id: string) => medicosDisponiveis.find((doctor) => String(doctor.id) === id)
   const iniciais = (nome: string) => nome.split(" ").filter(Boolean).map((part) => part[0]).slice(0, 2).join("").toUpperCase()
   const ocupacaoPercentual = leitos.length ? Math.round((leitosOcupados.length / leitos.length) * 100) : 0
   const contarLeitos = (status: Leito["status"]) => leitos.filter((bed) => bed.status === status).length
@@ -648,9 +607,9 @@ export default function ReceptionistDashboard({
     <div className="role-recepcao min-h-screen" style={{ background: "var(--background)" }}>
       <DashboardSidebar
         role="Recepção"
-        initials={RECEPCIONISTA.iniciais}
-        name={RECEPCIONISTA.nome}
-        detail={`${RECEPCIONISTA.cargo} · ${RECEPCIONISTA.registro}`}
+        initials={receptionistInitials}
+        name={userName}
+        detail="Recepcionista"
         tabs={tabs}
         activeTab={activeTab}
         onSelect={(key) => setActiveTab(key as Tab)}
@@ -662,23 +621,24 @@ export default function ReceptionistDashboard({
         <DashboardHeader
           role="Recepção"
           section={activeTabInfo?.label ?? ""}
-          name={RECEPCIONISTA.nome}
-          detail={`${RECEPCIONISTA.cargo} · ${RECEPCIONISTA.registro}`}
-          initials={RECEPCIONISTA.iniciais}
+          name={userName}
+          detail="Recepcionista"
+          initials={receptionistInitials}
           theme={theme}
           onToggleTheme={onToggleTheme}
         />
 
         <SectionContext.Provider value={{ key: activeTab, label: activeTabInfo?.label ?? "", group: activeTabInfo?.group, role: "Recepção" }}>
         <main className="dashboard-main mx-auto w-full min-w-0 max-w-[1400px] flex-1 px-4 pb-36 pt-20 sm:px-6 sm:pb-24 xl:p-8">
-          {activeTab === "equipe" && <StaffManagement professionals={profissionais} setProfessionals={setProfissionais} />}
+          {apiLoading && <p role="status" className="mb-4 rounded-xl border px-4 py-3 text-sm" style={{ background: "var(--secondary)", borderColor: "var(--border)", color: "var(--muted-foreground)" }}>Carregando dados da API…</p>}
+          {apiError && <p role="alert" className="mb-4 rounded-xl border px-4 py-3 text-sm" style={{ background: "var(--danger-surface)", borderColor: "var(--border)", color: "var(--danger-foreground)" }}>{apiError}</p>}
           {activeTab === "atividades" && <ActivityLog />}
           {/* ============ CENTRAL DA RECEPÇÃO ============ */}
           {activeTab === "recepcao" && (
             <div className="fade-in">
               <HeroHeader
                 eyebrow={`Central da recepção · ${shiftLabel()}`}
-                title={`${greeting()}, ${RECEPCIONISTA.nome.split(" ")[0]}`}
+                title={`${greeting()}, ${userName.split(" ")[0]}`}
                 subtitle={`${formatLongLocalDate()} · Visão operacional de atendimentos, exames e leitos`}
                 aside={
                   <div className="hero-actions grid grid-cols-3 gap-2 lg:flex lg:flex-wrap">
@@ -801,7 +761,7 @@ export default function ReceptionistDashboard({
                   <SectionCard title="Médicos hoje" description="Agenda por profissional" icon="stethoscope" bodyClassName="p-3">
                     <ul className="space-y-1.5" id="lista-medicos-hoje">
                       {medicosDisponiveis.map((medico, index) => {
-                        const consultas = consultasHoje.filter((item) => item.medicoId === medico.id)
+                        const consultas = consultasHoje.filter((item) => item.medicoId === String(medico.id))
                         const proxima = consultas.find((item) => (item.status ?? "Agendada") !== "Concluída")
                         return (
                           <li key={medico.id} className={"flex items-center gap-3 rounded-xl p-2" + (index >= limiteMedicosCelular && !listasExpandidas.medicos ? " max-sm:hidden" : "")}>
@@ -1669,7 +1629,7 @@ export default function ReceptionistDashboard({
                 const internacao = internacoesLocais.find((item) => item.pacienteId === fichaPacienteId && item.status === "Ativa")
                 const hist = historicoAtendimentos[fichaPacienteId] ?? []
                 const ultimo = hist[0]
-                const medico = ultimo ? medicos.find((m) => m.nome === ultimo.medico) : null
+                const medico = ultimo ? medicosDisponiveis.find((m) => m.nome === ultimo.medico) : null
                 const numeroFicha = `FA-${pac.id.replace("PAC-", "")}-${String(new Date().getFullYear()).slice(2)}`
                 const linhas = (rows: [string, string][]) => (
                   <dl className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">

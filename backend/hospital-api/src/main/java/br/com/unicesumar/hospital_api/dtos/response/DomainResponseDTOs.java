@@ -4,11 +4,11 @@ import java.time.*;
 
 public final class DomainResponseDTOs {
     private DomainResponseDTOs() {}
-    public record Paciente(Long id, String nome, String cpf, LocalDate dataNascimento, String telefone, String endereco, String numeroProntuario, String convenio) {}
+    public record Paciente(Long id, String nome, String cpf, LocalDate dataNascimento, String telefone, String endereco, String numeroProntuario, String convenio, String sexo) {}
     public record Medicamento(Long id, String nome, String dosagem, Boolean ativo) {}
-    public record Leito(Long id, String numero, Integer andar, String quarto, String tipo, String status, String observacao) {}
+    public record Leito(Long id, String numero, Integer andar, String quarto, String tipo, String status, String observacao, String setor) {}
     public record Atendimento(Long id, LocalDateTime data, String tipo, String descricao, String status, Long leitoId, Long pacienteId, Long funcionarioResponsavelId, Long medicoResponsavelId) {}
-    public record Internacao(Long id, Long pacienteId, Long leitoId, LocalDate dataInternacao, LocalDate dataPrevistaAlta, LocalDate dataAlta, String motivo, String status, String observacoes) {}
+    public record Internacao(Long id, Long pacienteId, Long leitoId, Long medicoId, LocalDate dataInternacao, LocalDate dataPrevistaAlta, LocalDate dataAlta, String motivo, String status, String observacoes) {}
     public record AgendaMedica(Long id, Long medicoId, LocalDateTime horaInicio, LocalDateTime horaFim, String status, String tipoConsulta, String observacoes) {}
     public record Agendamento(Long id, Long pacienteId, Long medicoId, LocalDate data, LocalTime horario, Integer duracao, String status, String tipo, String observacoes) {}
     public record Prescricao(Long id, LocalDateTime data, String observacao, String status, Long pacienteId, Long medicoId, Long atendimentoId) {}

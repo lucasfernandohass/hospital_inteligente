@@ -18,9 +18,17 @@ import { HOSPITALIZATION_STORAGE_KEY, type Hospitalization } from "./hospitaliza
 import useLocalStorageState from "./useLocalStorageState"
 import { formatLongLocalDate } from "./appointmentStore"
 import { BED_STORAGE_KEY, initialRegisteredBeds, initialRegisteredPatients, normalizeRegisteredBeds, PATIENT_STORAGE_KEY, type RegisteredBed, type RegisteredPatient } from "./patientStore"
+import { usePanelRoute } from "../hooks/usePanelRoute"
+import { api, ApiError } from "../services/api"
+import { mapBed, mapInternment, mapPatient } from "../services/mappers"
+import { mapPrescriptions } from "../services/mappers"
+import { useVitalFeed } from "../hooks/useVitalFeed"
 
 interface Props {
   onNavigate: (screen: Screen) => void
+  token: string
+  userName: string
+  userId: number
   theme: Theme
   onToggleTheme: () => void
 }
@@ -32,11 +40,7 @@ type Tab = "internados" | "monitoramento" | "prescricao" | "administracao" | "ev
 // Perfil fixo da enfermeira responsável
 // ---------------------------------------------------------------------------
 const ENFERMEIRA = {
-  nome: "Ana Dias",
-  iniciais: "AD",
-  cargo: "Enfermeira Chefe",
-  coren: "COREN 234.567",
-  assinatura: "Enf. Ana Dias · COREN 234.567",
+  cargo: "Enfermagem",
 }
 
 // ---------------------------------------------------------------------------
@@ -497,13 +501,35 @@ const statusPrescricaoColor = {
 
 export default function NurseDashboard({
   onNavigate,
+  token,
+  userName,
+  userId,
   theme,
   onToggleTheme,
 }: Props) {
-  const [registeredPatients] = useLocalStorageState<RegisteredPatient[]>(PATIENT_STORAGE_KEY, initialRegisteredPatients)
-  const [registeredBeds, setRegisteredBeds] = useLocalStorageState<RegisteredBed[]>(BED_STORAGE_KEY, initialRegisteredBeds)
-  useEffect(() => setRegisteredBeds((current) => normalizeRegisteredBeds(current)), [setRegisteredBeds])
-  const [hospitalizations] = useLocalStorageState<Hospitalization[]>(HOSPITALIZATION_STORAGE_KEY, [])
+  const [registeredPatients, setRegisteredPatients] = useState<RegisteredPatient[]>([])
+  const [registeredBeds, setRegisteredBeds] = useState<RegisteredBed[]>([])
+  const [hospitalizations, setHospitalizations] = useState<Hospitalization[]>([])
+  const [apiPrescriptions, setApiPrescriptions] = useState<SharedPrescription[]>([])
+  const [dataLoading, setDataLoading] = useState(true)
+  const [dataError, setDataError] = useState("")
+  useEffect(() => {
+    let active = true
+    setDataLoading(true)
+    Promise.all([api.listPatients(token), api.listBeds(token), api.listInternments(token), api.listDoctors(token), api.listPrescriptions(token), api.listPrescriptionItems(token), api.listMedications(token), api.listMedicationAdministrations(token)])
+      .then(([patientsDto, bedsDto, internmentsDto, doctors, prescriptions, items, medications, administrations]) => {
+        if (!active) return
+        setRegisteredPatients(patientsDto.map(mapPatient))
+        setRegisteredBeds(bedsDto.map((bed) => mapBed(bed, internmentsDto)))
+        setHospitalizations(internmentsDto.map((item) => mapInternment(item, bedsDto, doctors)))
+        setApiPrescriptions(mapPrescriptions(prescriptions, items, medications, doctors))
+        setAdministrados(administrations.map((item) => String(item.itemPrescricaoId)))
+        setDataError("")
+      })
+      .catch((error) => { if (active) setDataError(error instanceof ApiError ? error.message : "Não foi possível carregar dados da API.") })
+      .finally(() => { if (active) setDataLoading(false) })
+    return () => { active = false }
+  }, [token])
   const pacientes = useMemo(() => {
     const knownIds = new Set(pacientesBase.map((patient) => patient.id))
     const occupiedBeds = registeredBeds.filter((bed) => bed.status === "Ocupado" && bed.pacienteId)
@@ -559,7 +585,11 @@ export default function NurseDashboard({
       })
     return [...synchronizedBase, ...additions]
   }, [hospitalizations, registeredBeds, registeredPatients])
-  const [activeTab, setActiveTab] = useState<Tab>("internados")
+  const monitorPatients = useMemo(() => pacientes.map((patient) => ({
+    id: patient.id, name: patient.nome, bed: patient.leito, sector: patient.ala, condition: patient.condicao,
+  })), [pacientes])
+  const { readings: liveVitals } = useVitalFeed(monitorPatients.map((patient) => patient.id), token)
+  const [activeTab, setActiveTab] = usePanelRoute("enfermagem", ["internados", "monitoramento", "prescricao", "administracao", "evolucao", "atividades", "alertas"] as const, "internados")
   const [selectedPaciente, setSelectedPaciente] =
     useState<typeof pacientes[0] | null>(pacientes[0])
   useEffect(() => {
@@ -577,7 +607,7 @@ export default function NurseDashboard({
     return patient.risco
   }
   const [patientSearch, setPatientSearch] = useState("")
-  const [administrados, setAdministrados] = useLocalStorageState<string[]>(MEDICATION_ADMINISTRATION_STORAGE_KEY, readMedicationAdministrations)
+  const [administrados, setAdministrados] = useState<string[]>([])
   const [prescricoesCompartilhadas] = useLocalStorageState<SharedPrescription[]>(PRESCRIPTION_STORAGE_KEY, [])
   const [evolucaoTexto, setEvolucaoTexto] = useState("")
   const [evolucaoEnviada, setEvolucaoEnviada] = useState(false)
@@ -597,8 +627,12 @@ export default function NurseDashboard({
       const item: PrescricaoItem = { ...prescription.item, status: "pendente" }
       result[prescription.pacienteId] = [item, ...(result[prescription.pacienteId] ?? [])]
     }
+    for (const prescription of apiPrescriptions) {
+      const item: PrescricaoItem = { ...prescription.item, status: "pendente" }
+      result[prescription.pacienteId] = [item, ...(result[prescription.pacienteId] ?? [])]
+    }
     return result
-  }, [prescricoesCompartilhadas])
+  }, [apiPrescriptions, prescricoesCompartilhadas])
 
   const agora = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" }).format(new Date())
 
@@ -642,11 +676,22 @@ export default function NurseDashboard({
     setAlertasReconhecidos((current) => [...new Set([...current, ...alertasAtivos.map((alert) => alert.id)])])
   }
 
-  const confirmarAdministracao = (itemId: string) => {
-    if (!administrados.includes(itemId)) logActivity("Enfermagem", "Administração registrada", "Medicação demonstrativa", itemId)
-    setAdministrados((current) =>
-      current.includes(itemId) ? current : [...current, itemId],
-    )
+  const confirmarAdministracao = async (itemId: string) => {
+    if (!selectedPaciente || administrados.includes(itemId)) return
+    const item = prescricaoAtual.find((prescriptionItem) => prescriptionItem.id === itemId)
+    if (!item) return
+    try {
+      const now = new Date()
+      const dataHora = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}T${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`
+      await api.createMedicationAdministration({
+        dataHora, dose: item.dosagem, via: item.via, observacao: null,
+        itemPrescricaoId: Number(item.id), pacienteId: Number(selectedPaciente.id), administradoPor: userId,
+      }, token)
+      setAdministrados((current) => current.includes(itemId) ? current : [...current, itemId])
+      logActivity("Enfermagem", "Administração registrada", "Medicação", itemId)
+    } catch (error) {
+      setDataError(error instanceof ApiError ? error.message : "Não foi possível registrar a administração.")
+    }
   }
 
   const enviarEvolucao = () => {
@@ -657,7 +702,7 @@ export default function NurseDashboard({
       data: new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(now),
       descricao: evolucaoTexto.trim(),
       perfil: "Enfermagem" as const,
-      profissional: ENFERMEIRA.assinatura,
+      profissional: userName,
     }
 
     setEvolucoesPorPaciente((current) => ({
@@ -777,9 +822,9 @@ export default function NurseDashboard({
       <AlertNotifications alerts={monitoringAlerts} profile="Enfermagem" onOpenAlerts={() => setActiveTab("alertas")} />
       <DashboardSidebar
         role="Enfermagem"
-        initials={ENFERMEIRA.iniciais}
-        name={ENFERMEIRA.nome}
-        detail={`${ENFERMEIRA.cargo} · ${ENFERMEIRA.coren}`}
+        initials={userName.split(" ").filter(Boolean).map((part) => part[0]).slice(0, 2).join("").toUpperCase()}
+        name={userName}
+        detail={ENFERMEIRA.cargo}
         tabs={tabs}
         activeTab={activeTab}
         onSelect={(key) => setActiveTab(key as Tab)}
@@ -792,9 +837,9 @@ export default function NurseDashboard({
         <DashboardHeader
           role="Enfermagem"
           section={activeTabInfo?.label ?? ""}
-          name={ENFERMEIRA.nome}
-          detail={`${ENFERMEIRA.cargo} · ${ENFERMEIRA.coren}`}
-          initials={ENFERMEIRA.iniciais}
+          name={userName}
+          detail={ENFERMEIRA.cargo}
+          initials={userName.split(" ").filter(Boolean).map((part) => part[0]).slice(0, 2).join("").toUpperCase()}
           theme={theme}
           onToggleTheme={onToggleTheme}
           alertCount={alertasPendentes.length + monitoringPendingCount}
@@ -803,6 +848,8 @@ export default function NurseDashboard({
 
         <SectionContext.Provider value={{ key: activeTab, label: activeTabInfo?.label ?? "", group: activeTabInfo?.group, role: "Enfermagem" }}>
         <main className="dashboard-main mx-auto w-full min-w-0 max-w-[1400px] flex-1 px-4 pb-36 pt-20 sm:px-6 sm:pb-24 xl:p-8">
+          {dataLoading && <p role="status" className="mb-4 rounded-xl border px-4 py-3 text-sm" style={{ background: "var(--secondary)", borderColor: "var(--border)", color: "var(--muted-foreground)" }}>Carregando dados da API…</p>}
+          {dataError && <p role="alert" className="mb-4 rounded-xl border px-4 py-3 text-sm" style={{ background: "var(--danger-surface)", borderColor: "var(--border)", color: "var(--danger-foreground)" }}>{dataError}</p>}
           <div className={activeTab === "monitoramento" ? "block" : "hidden"} aria-hidden={activeTab !== "monitoramento"}>
             <VitalMonitoring
               profile="Enfermagem"
@@ -810,14 +857,8 @@ export default function NurseDashboard({
               onAlertsChange={setMonitoringAlerts}
               acknowledgedAlerts={monitoringAcknowledged}
               setAcknowledgedAlerts={setMonitoringAcknowledged}
-              patients={pacientes.map((patient) => ({
-                id: patient.id,
-                name: patient.nome,
-                bed: patient.leito,
-                sector: patient.ala,
-                condition: patient.condicao,
-                bloodPressure: latestVitalsFor(patient.id)?.pressao,
-              }))}
+              patients={monitorPatients}
+              liveVitals={liveVitals}
             />
           </div>
           {/* ============ INTERNADOS ============ */}
@@ -825,8 +866,8 @@ export default function NurseDashboard({
             <div className="fade-in">
               <HeroHeader
                 eyebrow={`Central do plantão · ${shiftLabel()}`}
-                title={`${greeting()}, ${ENFERMEIRA.nome.split(" ")[0]}`}
-                subtitle={`${formatLongLocalDate()} · ${ENFERMEIRA.cargo} · ${ENFERMEIRA.coren}`}
+                title={`${greeting()}, ${userName.split(" ")[0]}`}
+                subtitle={`${formatLongLocalDate()} · ${ENFERMEIRA.cargo}`}
                 aside={
                   <div className="hero-actions grid grid-cols-3 gap-2 lg:flex lg:flex-wrap">
                     <QuickAction variant="hero" icon="administracao" label="Administrar medicação" onClick={() => setActiveTab("administracao")} />
@@ -1082,7 +1123,7 @@ export default function NurseDashboard({
                 meta={
                   <>
                     <MetaItem icon="clock" label="Agora" value={agora} tone="info" />
-                    <MetaItem icon="user" label="Profissional" value={ENFERMEIRA.assinatura} tone="neutral" />
+                    <MetaItem icon="user" label="Profissional" value={userName} tone="neutral" />
                     <MetaItem icon="administracao" label="Pendentes no plantão" value={dosesPendentes.length} tone="warning" />
                   </>
                 }
@@ -1139,7 +1180,7 @@ export default function NurseDashboard({
                               </div>
                               {adm ? (
                                 <p className="flex items-center gap-2 text-xs font-semibold sm:max-w-[12rem]" style={{ color: "var(--success-foreground)" }}>
-                                  <UiIcon name="checkCircle" size={18} /> Administração registrada · {ENFERMEIRA.nome}
+                                  <UiIcon name="checkCircle" size={18} /> Administração registrada · {userName}
                                 </p>
                               ) : (
                                 <button type="button" onClick={() => confirmarAdministracao(item.id)} aria-label={`Confirmar administração de ${item.medicamento} ${item.dosagem} às ${item.horario}`} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold" style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}>
@@ -1210,7 +1251,7 @@ export default function NurseDashboard({
                         style={inputStyle}
                       />
                       <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>{evolucaoTexto.trim().length} caracteres · {ENFERMEIRA.assinatura}</span>
+                        <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>{evolucaoTexto.trim().length} caracteres · {userName}</span>
                         <div className="flex flex-wrap items-center gap-2">
                           {evolucaoEnviada && (
                             <span role="status" className="inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold" style={{ background: "var(--success-surface)", color: "var(--success-foreground)" }}>
@@ -1243,7 +1284,7 @@ export default function NurseDashboard({
                             >
                               <p style={{ color: "var(--foreground)" }}>{rc.descricao}</p>
                               <p className="mt-1 flex flex-wrap items-center gap-2 text-xs">
-                                <span>{rc.profissional ?? ENFERMEIRA.assinatura}</span>
+                                <span>{rc.profissional ?? userName}</span>
                                 {rc.perfil !== "Médico" && <StatusBadge tone="success" icon="check" size="sm">Enviado ao médico</StatusBadge>}
                               </p>
                             </TimelineItem>

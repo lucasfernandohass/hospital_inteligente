@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { logActivity } from "./activityStore"
 import { PageTitle } from "./ui"
+import type { LiveVitalReading } from "../hooks/useVitalFeed"
 
 interface MonitoredPatient {
   id: string
@@ -10,6 +11,7 @@ interface MonitoredPatient {
   condition: string
   /** Última pressão arterial registrada no prontuário (a simulação não mede PA). */
   bloodPressure?: string
+  liveVital?: LiveVitalReading
 }
 
 interface VitalSample {
@@ -22,6 +24,7 @@ interface VitalSample {
 
 interface MonitorRecord extends MonitoredPatient, VitalSample {
   connected: boolean
+  available: string[]
   ecgAbnormal: boolean
   deviceName: string
   deviceId: string
@@ -30,6 +33,7 @@ interface MonitorRecord extends MonitoredPatient, VitalSample {
 
 interface Props {
   patients: MonitoredPatient[]
+  liveVitals: Record<string, LiveVitalReading>
   profile: "Médico" | "Enfermagem"
   storageKey: string
   acknowledgedAlerts: string[]
@@ -90,13 +94,6 @@ const defaultThresholds: Thresholds = {
   temperatureMax: 38,
 }
 
-const clock = () =>
-  new Intl.DateTimeFormat("pt-BR", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).format(new Date())
-
 const dateTimeClock = () =>
   new Intl.DateTimeFormat("pt-BR", {
     dateStyle: "short",
@@ -128,18 +125,17 @@ function getTrendEvents(record: MonitorRecord): TriggeredEvent[] {
 
 function getTriggeredEvents(record: MonitorRecord, thresholds: Thresholds) {
   const events: TriggeredEvent[] = []
-  if (record.heartRate < thresholds.heartRateMin) events.push({ id: "heart-rate-low", label: "Frequência cardíaca abaixo do limite", value: record.heartRate + " bpm", limit: "mínimo " + thresholds.heartRateMin + " bpm" })
-  if (record.heartRate > thresholds.heartRateMax) events.push({ id: "heart-rate-high", label: "Frequência cardíaca acima do limite", value: record.heartRate + " bpm", limit: "máximo " + thresholds.heartRateMax + " bpm" })
-  if (record.oxygen < thresholds.oxygenMin) events.push({ id: "oxygen-low", label: "Saturação abaixo do limite", value: record.oxygen.toFixed(1) + "%", limit: "mínimo " + thresholds.oxygenMin + "%" })
-  if (record.respiration > thresholds.respirationMax) events.push({ id: "respiration-high", label: "Frequência respiratória acima do limite", value: record.respiration + " rpm", limit: "máximo " + thresholds.respirationMax + " rpm" })
-  if (record.temperature >= thresholds.temperatureMax) events.push({ id: "temperature-high", label: "Temperatura acima do limite", value: record.temperature.toFixed(1) + " °C", limit: "máximo " + thresholds.temperatureMax + " °C" })
-  if (!record.connected) events.push({ id: "device-offline", label: "Dispositivo sem comunicação", value: record.deviceId, limit: "conexão ativa" })
-  if (record.ecgAbnormal) events.push({ id: "ecg-change", label: "Alteração detectada no ECG demonstrativo", value: "Traçado irregular simulado", limit: "padrão regular" })
+  if (!record.connected) return [{ id: "device-offline", label: "Dispositivo sem comunicação", value: record.deviceId, limit: "última leitura há menos de 15 segundos" }]
+  if (record.available.includes("heartRate") && record.heartRate < thresholds.heartRateMin) events.push({ id: "heart-rate-low", label: "Frequência cardíaca abaixo do limite", value: record.heartRate + " bpm", limit: "mínimo " + thresholds.heartRateMin + " bpm" })
+  if (record.available.includes("heartRate") && record.heartRate > thresholds.heartRateMax) events.push({ id: "heart-rate-high", label: "Frequência cardíaca acima do limite", value: record.heartRate + " bpm", limit: "máximo " + thresholds.heartRateMax + " bpm" })
+  if (record.available.includes("oxygen") && record.oxygen < thresholds.oxygenMin) events.push({ id: "oxygen-low", label: "Saturação abaixo do limite", value: record.oxygen.toFixed(1) + "%", limit: "mínimo " + thresholds.oxygenMin + "%" })
+  if (record.available.includes("respiration") && record.respiration > thresholds.respirationMax) events.push({ id: "respiration-high", label: "Frequência respiratória acima do limite", value: record.respiration + " rpm", limit: "máximo " + thresholds.respirationMax + " rpm" })
+  if (record.available.includes("temperature") && record.temperature >= thresholds.temperatureMax) events.push({ id: "temperature-high", label: "Temperatura acima do limite", value: record.temperature.toFixed(1) + " °C", limit: "máximo " + thresholds.temperatureMax + " °C" })
   return [...events, ...getTrendEvents(record)]
 }
 
 function isCritical(record: MonitorRecord) {
-  return record.heartRate < 40 || record.heartRate > 130 || record.oxygen < 88 || record.respiration > 30 || record.temperature >= 39
+  return (record.available.includes("heartRate") && (record.heartRate < 40 || record.heartRate > 130)) || (record.available.includes("oxygen") && record.oxygen < 88) || (record.available.includes("respiration") && record.respiration > 30) || (record.available.includes("temperature") && record.temperature >= 39)
 }
 
 function eventSeverity(record: MonitorRecord, eventId: string): MonitoringAlert["severity"] {
@@ -153,34 +149,20 @@ function eventSeverity(record: MonitorRecord, eventId: string): MonitoringAlert[
 }
 
 function makeRecords(patients: MonitoredPatient[]): MonitorRecord[] {
-  return patients.map((patient, index) => {
-    const heartRate = index === 2 ? 116 : 68 + ((index * 7) % 24)
-    const oxygen = index === 4 ? 90 : 98 - (index % 3)
-    const respiration = index === 1 ? 22 : 14 + ((index * 2) % 7)
-    const temperature = index === 3 ? 37.8 : 36.4 + ((index * 3) % 8) / 10
-    const history = Array.from({ length: 10 }, (_, sampleIndex) => {
-      const hour = 8 + Math.floor(sampleIndex / 6)
-      const minute = (sampleIndex * 6) % 60
-      return {
-        time: String(hour).padStart(2, "0") + ":" + String(minute).padStart(2, "0"),
-        heartRate: Math.max(45, heartRate + Math.round(Math.sin(sampleIndex * 1.3) * 5)),
-        oxygen: Math.min(100, Math.max(80, oxygen + Math.sin(sampleIndex * 0.8))),
-        respiration: Math.max(8, respiration + Math.round(Math.cos(sampleIndex) * 2)),
-        temperature: temperature + Math.sin(sampleIndex * 0.7) * 0.2,
-      }
-    })
+  return patients.map((patient) => {
     return {
       ...patient,
-      connected: index !== 3,
-      ecgAbnormal: index === 2,
-      deviceName: "Monitor multiparamétrico",
+      connected: false,
+      available: [],
+      ecgAbnormal: false,
+      deviceName: "Monitor externo",
       deviceId: "MON-" + patient.id,
-      heartRate,
-      oxygen,
-      respiration,
-      temperature,
-      time: clock(),
-      history,
+      heartRate: 0,
+      oxygen: 0,
+      respiration: 0,
+      temperature: 0,
+      time: "Sem leitura",
+      history: [],
     }
   })
 }
@@ -204,6 +186,7 @@ function isMonitorRecord(value: unknown): value is MonitorRecord {
     typeof record.sector === "string" &&
     typeof record.condition === "string" &&
     typeof record.connected === "boolean" &&
+    Array.isArray(record.available) &&
     typeof record.ecgAbnormal === "boolean" &&
     typeof record.deviceName === "string" &&
     typeof record.deviceId === "string" &&
@@ -292,7 +275,7 @@ function Metric({ label, short, value, unit, color, alarm = false, offline = fal
   )
 }
 
-export default function VitalMonitoring({ patients, profile, storageKey, acknowledgedAlerts, setAcknowledgedAlerts, onAlertsChange }: Props) {
+export default function VitalMonitoring({ patients, liveVitals, profile, storageKey, acknowledgedAlerts, setAcknowledgedAlerts, onAlertsChange }: Props) {
   const [records, setRecords] = useState(() => readSavedRecords(storageKey, patients))
   const patientIdsKey = patients.map((patient) => patient.id).join("|")
   const activePatientIds = useMemo(() => new Set(patientIdsKey ? patientIdsKey.split("|") : []), [patientIdsKey])
@@ -300,11 +283,6 @@ export default function VitalMonitoring({ patients, profile, storageKey, acknowl
   const [filter, setFilter] = useState<Filter>("all")
   const [query, setQuery] = useState("")
   const [selectedId, setSelectedId] = useState(patients[0]?.id ?? "")
-  const [showDeviceForm, setShowDeviceForm] = useState(false)
-  const [devicePatientId, setDevicePatientId] = useState(patients[0]?.id ?? "")
-  const [deviceName, setDeviceName] = useState("Monitor multiparamétrico")
-  const [deviceId, setDeviceId] = useState("")
-  const [deviceError, setDeviceError] = useState("")
   const [showAllHistory, setShowAllHistory] = useState(false)
   const [occurrences, setOccurrences] = useState(() => readOccurrences(storageKey + "-occurrences"))
 
@@ -326,16 +304,40 @@ export default function VitalMonitoring({ patients, profile, storageKey, acknowl
 
   useEffect(() => {
     setSelectedId((current) => activePatientIds.has(current) ? current : patients[0]?.id ?? "")
-    setDevicePatientId((current) => activePatientIds.has(current) ? current : patients[0]?.id ?? "")
   }, [activePatientIds, patients])
 
   useEffect(() => {
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(records))
-    } catch {
-      // A demonstração continua funcionando mesmo se o navegador bloquear o armazenamento.
-    }
-  }, [records, storageKey])
+    const now = Date.now()
+    setRecords((current) => {
+      const next = patients.map((patient) => {
+      const record = current.find((item) => item.id === patient.id) ?? makeRecords([patient])[0]
+      const reading = liveVitals[patient.id]
+      const captured = reading?.capturedAt ? new Date(reading.capturedAt).getTime() : 0
+      const history: VitalSample[] = (reading?.history ?? []).map((sample) => ({ ...sample }))
+      return { ...record, ...patient, connected: captured > 0 && now - captured < 15000,
+        available: [reading?.heartRate !== undefined ? "heartRate" : "", reading?.oxygen !== undefined ? "oxygen" : "", reading?.respiration !== undefined ? "respiration" : "", reading?.temperature !== undefined ? "temperature" : ""].filter(Boolean),
+        heartRate: reading?.heartRate ?? 0, oxygen: reading?.oxygen ?? 0,
+        respiration: reading?.respiration ?? 0, temperature: reading?.temperature ?? 0,
+        bloodPressure: reading?.systolic !== undefined && reading.diastolic !== undefined ? `${reading.systolic}/${reading.diastolic}` : patient.bloodPressure,
+        time: reading?.capturedAt ? new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date(reading.capturedAt)) : "Sem leitura",
+        history: history.slice(-720), ecgAbnormal: false }
+      })
+      if (current.length === next.length && current.every((record, index) => {
+        const updated = next[index]
+        return record.id === updated.id && record.name === updated.name && record.bed === updated.bed && record.sector === updated.sector && record.condition === updated.condition && record.connected === updated.connected && JSON.stringify(record.available) === JSON.stringify(updated.available) && record.heartRate === updated.heartRate && record.oxygen === updated.oxygen && record.respiration === updated.respiration && record.temperature === updated.temperature && record.time === updated.time && record.history.length === updated.history.length && record.history.at(-1)?.time === updated.history.at(-1)?.time
+      })) return current
+      return next
+    })
+  }, [liveVitals, patients])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setRecords((current) => current.map((record) => {
+      const captured = liveVitals[record.id]?.capturedAt ? new Date(liveVitals[record.id]!.capturedAt!).getTime() : 0
+      const connected = captured > 0 && Date.now() - captured < 15000
+      return record.connected === connected ? record : { ...record, connected }
+    })), 1000)
+    return () => window.clearInterval(timer)
+  }, [liveVitals])
 
   useEffect(() => {
     try {
@@ -352,30 +354,6 @@ export default function VitalMonitoring({ patients, profile, storageKey, acknowl
       // O histórico permanece disponível durante a sessão se o navegador bloquear o armazenamento.
     }
   }, [occurrences, storageKey])
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setRecords((current) =>
-        current.map((record) => {
-          if (!activePatientIds.has(record.id) || !record.connected) return record
-          const sample: VitalSample = {
-            time: clock(),
-            heartRate: Math.max(45, record.heartRate + Math.round(Math.random() * 4 - 2)),
-            oxygen: Math.min(100, Math.max(80, record.oxygen + Math.random() * 0.4 - 0.2)),
-            respiration: Math.max(8, record.respiration + Math.round(Math.random() * 2 - 1)),
-            temperature: Math.min(40, Math.max(35, record.temperature + Math.random() * 0.1 - 0.05)),
-          }
-          return {
-            ...record,
-            ...sample,
-            ecgAbnormal: Math.random() < 0.015 ? !record.ecgAbnormal : record.ecgAbnormal,
-            history: [...record.history.slice(-719), sample],
-          }
-        }),
-      )
-    }, 5000)
-    return () => window.clearInterval(timer)
-  }, [activePatientIds])
 
   const visibleRecords = useMemo(() => records.filter((record) => activePatientIds.has(record.id)), [activePatientIds, records])
   const selected = visibleRecords.find((record) => record.id === selectedId) ?? visibleRecords[0]
@@ -409,38 +387,6 @@ export default function VitalMonitoring({ patients, profile, storageKey, acknowl
       return text.includes(normalized) && matchesFilter
     })
   }, [filter, query, visibleRecords, thresholds])
-
-  const setDeviceConnection = (id: string, connected: boolean) => {
-    const record = records.find((item) => item.id === id)
-    if (!record || record.connected === connected) return
-    setRecords((current) => current.map((item) => (item.id === id ? { ...item, connected, time: clock() } : item)))
-    logActivity(profile, connected ? "Dispositivo reconectado" : "Dispositivo desconectado", id, record.deviceId + " · Leito " + record.bed)
-  }
-
-  const saveDevice = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const patient = records.find((record) => record.id === devicePatientId)
-    if (!patient || !deviceName.trim() || !deviceId.trim()) return
-    const duplicate = records.some(
-      (record) => record.id !== devicePatientId && record.deviceId.toLocaleLowerCase("pt-BR") === deviceId.trim().toLocaleLowerCase("pt-BR"),
-    )
-    if (duplicate) {
-      setDeviceError("Este identificador já está vinculado a outro paciente.")
-      return
-    }
-    setRecords((current) =>
-      current.map((record) =>
-        record.id === devicePatientId
-          ? { ...record, deviceName: deviceName.trim(), deviceId: deviceId.trim(), connected: true, time: clock() }
-          : record,
-      ),
-    )
-    logActivity(profile, "Dispositivo vinculado ao paciente", patient.id, deviceName.trim() + " · " + deviceId.trim())
-    setSelectedId(devicePatientId)
-    setShowDeviceForm(false)
-    setDeviceId("")
-    setDeviceError("")
-  }
 
   const updateThreshold = (key: keyof Thresholds, value: string) => {
     const parsed = Number(value)
@@ -545,53 +491,17 @@ export default function VitalMonitoring({ patients, profile, storageKey, acknowl
         <PageTitle
           eyebrow={"Monitoramento · " + profile}
           title="Monitoramento de sinais vitais"
-          subtitle="Acompanhamento demonstrativo de pacientes e dispositivos conectados."
+          subtitle="Acompanhamento das últimas medições recebidas da API e do WebSocket."
           action={
             <>
-              <span className="inline-flex min-h-10 items-center gap-2 rounded-full border px-3 text-xs font-semibold" style={{ background: "var(--success-surface)", borderColor: "color-mix(in srgb, var(--success) 35%, transparent)", color: "var(--success-foreground)" }}>
-                <span className="h-2 w-2 animate-pulse rounded-full" style={{ background: "var(--success)" }} />
-                Simulação ao vivo
+              <span className="inline-flex min-h-10 items-center gap-2 rounded-full border px-3 text-xs font-semibold" style={{ background: "var(--secondary)", borderColor: "var(--border)", color: "var(--foreground)" }}>
+                Feed do monitor
               </span>
-              <button type="button" onClick={() => { setShowDeviceForm((value) => !value); setDeviceError("") }} className="min-h-10 rounded-xl px-4 text-sm font-semibold" style={{ background: showDeviceForm ? "var(--secondary)" : "var(--primary)", color: showDeviceForm ? "var(--control-foreground)" : "var(--primary-foreground)" }}>
-                {showDeviceForm ? "Fechar vínculo" : "Vincular dispositivo"}
-              </button>
             </>
           }
         />
       </div>
 
-      {showDeviceForm && (
-        <form onSubmit={saveDevice} className="slide-up grid grid-cols-1 gap-3 rounded-[var(--radius)] border p-5 sm:grid-cols-2 xl:grid-cols-4" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
-          <label className="flex min-w-0 flex-col gap-1.5 text-xs font-medium" style={{ color: "var(--muted-foreground)" }}>
-            Paciente
-            <select required value={devicePatientId} onChange={(event) => setDevicePatientId(event.target.value)} className="min-h-11 rounded-xl border px-3 text-sm" style={controlStyle}>
-              {patients.map((patient) => <option key={patient.id} value={patient.id}>{patient.name} · leito {patient.bed}</option>)}
-            </select>
-          </label>
-          <label className="flex min-w-0 flex-col gap-1.5 text-xs font-medium" style={{ color: "var(--muted-foreground)" }}>
-            Tipo de dispositivo
-            <select value={deviceName} onChange={(event) => setDeviceName(event.target.value)} className="min-h-11 rounded-xl border px-3 text-sm" style={controlStyle}>
-              <option>Monitor multiparamétrico</option>
-              <option>Oxímetro de pulso</option>
-              <option>Termômetro digital</option>
-              <option>Monitor de ECG</option>
-            </select>
-          </label>
-          <label className="flex min-w-0 flex-col gap-1.5 text-xs font-medium" style={{ color: "var(--muted-foreground)" }}>
-            Identificação do dispositivo
-            <input required value={deviceId} onChange={(event) => { setDeviceId(event.target.value); setDeviceError("") }} placeholder="Ex.: MON-001" className="min-h-11 rounded-xl border px-3 text-sm" style={controlStyle} />
-          </label>
-          <div className="flex items-end">
-            <button type="submit" className="min-h-11 w-full rounded-xl px-4 text-sm font-semibold" style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}>
-              Salvar vínculo simulado
-            </button>
-          </div>
-          <p className="text-xs sm:col-span-2 xl:col-span-4" style={{ color: "var(--muted-foreground)" }}>
-            Os dados do vínculo ficam salvos somente neste navegador.
-          </p>
-          {deviceError && <p role="alert" className="text-xs font-semibold text-red-600 sm:col-span-2 xl:col-span-4">{deviceError}</p>}
-        </form>
-      )}
 
       <div className="keep-2-cols grid grid-cols-2 gap-3 xl:grid-cols-4">
         {[
@@ -671,10 +581,10 @@ export default function VitalMonitoring({ patients, profile, storageKey, acknowl
                     <span className="font-mono text-[11px] tabular-nums" style={{ color: "var(--monitor-muted)" }}>{record.deviceId} · {record.time}</span>
                   </div>
                   <div className="mt-3 grid grid-cols-2 gap-2">
-                    <Metric label="Frequência cardíaca" short="FC" value={String(record.heartRate)} unit="bpm" color="var(--vital-hr)" alarm={record.heartRate < thresholds.heartRateMin || record.heartRate > thresholds.heartRateMax} offline={!record.connected} />
-                    <Metric label="Saturação" short="SpO₂" value={record.oxygen.toFixed(1)} unit="%" color="var(--vital-spo2)" alarm={record.oxygen < thresholds.oxygenMin} offline={!record.connected} />
-                    <Metric label="Frequência respiratória" short="FR" value={String(record.respiration)} unit="rpm" color="var(--vital-rr)" alarm={record.respiration > thresholds.respirationMax} offline={!record.connected} />
-                    <Metric label="Temperatura" short="TEMP" value={record.temperature.toFixed(1)} unit="°C" color="var(--vital-temp)" alarm={record.temperature >= thresholds.temperatureMax} offline={!record.connected} />
+                    <Metric label="Frequência cardíaca" short="FC" value={String(record.heartRate)} unit="bpm" color="var(--vital-hr)" alarm={record.heartRate < thresholds.heartRateMin || record.heartRate > thresholds.heartRateMax} offline={!record.connected || !record.available.includes("heartRate")} />
+                    <Metric label="Saturação" short="SpO₂" value={record.oxygen.toFixed(1)} unit="%" color="var(--vital-spo2)" alarm={record.oxygen < thresholds.oxygenMin} offline={!record.connected || !record.available.includes("oxygen")} />
+                    <Metric label="Frequência respiratória" short="FR" value={String(record.respiration)} unit="rpm" color="var(--vital-rr)" alarm={record.respiration > thresholds.respirationMax} offline={!record.connected || !record.available.includes("respiration")} />
+                    <Metric label="Temperatura" short="TEMP" value={record.temperature.toFixed(1)} unit="°C" color="var(--vital-temp)" alarm={record.temperature >= thresholds.temperatureMax} offline={!record.connected || !record.available.includes("temperature")} />
                     <div className="monitor-tile col-span-2 flex items-center justify-between gap-3 rounded-lg px-3 py-2">
                       <p className="text-[11px] font-bold tracking-wide" style={{ color: "var(--vital-bp)" }}>PA <span className="font-medium" style={{ color: "var(--monitor-muted)" }}>· último registro</span></p>
                       <p className="monitor-value text-xl" style={{ color: "var(--vital-bp)" }} aria-label={"Pressão arterial do último registro: " + (record.bloodPressure ?? "sem registro") + " mmHg"}>
@@ -682,9 +592,6 @@ export default function VitalMonitoring({ patients, profile, storageKey, acknowl
                       </p>
                     </div>
                   </div>
-                  <button type="button" onClick={() => setDeviceConnection(record.id, !record.connected)} className="mt-3 min-h-10 w-full rounded-lg border px-3 text-xs font-semibold transition-colors hover:bg-white/5" style={{ borderColor: "var(--monitor-border)", color: "var(--monitor-text)" }}>
-                    Simular {record.connected ? "desconexão" : "reconexão"} do dispositivo
-                  </button>
                 </article>
               )
             })}
@@ -711,13 +618,7 @@ export default function VitalMonitoring({ patients, profile, storageKey, acknowl
               </div>
             </div>
             <div className="monitor-screen mt-4 rounded-xl p-3.5">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-[11px] font-bold uppercase tracking-[0.12em]" style={{ color: "var(--vital-hr)" }}>ECG · II</h3>
-                <span className="text-[11px] font-medium" aria-live="polite" style={{ color: selected.ecgAbnormal ? "var(--vital-alarm)" : "var(--monitor-muted)" }}>{selected.ecgAbnormal ? "Alteração simulada" : "Ritmo regular simulado"} · Ilustrativo</span>
-              </div>
-              <svg viewBox="0 0 320 56" className="mt-2 h-16 w-full" role="img" aria-label="Animação ilustrativa de um traçado de eletrocardiograma">
-                <path d="M0 28H40l8-2 6 2h25l8-4 5 8 7-24 8 39 8-19 6 2h33l8-2 6 2h24l8-4 5 8 7-24 8 39 8-19 6 2h33l8-2 6 2h27" className="ecg-trace monitor-trace" fill="none" stroke={selected.ecgAbnormal ? "var(--vital-alarm)" : "var(--vital-hr)"} strokeWidth="2" strokeLinejoin="round" />
-              </svg>
+              <p className="text-xs" style={{ color: "var(--monitor-muted)" }}>O endpoint atual fornece parâmetros numéricos. O traçado de ECG não está disponível na API.</p>
               <div className="mt-3 grid grid-cols-2 gap-x-2 gap-y-3 min-[420px]:grid-cols-3">
                 {[
                   { short: "FC", value: String(selected.heartRate), unit: "bpm", color: "var(--vital-hr)", live: true },
@@ -738,15 +639,15 @@ export default function VitalMonitoring({ patients, profile, storageKey, acknowl
                 <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-full" style={{ background: "var(--vital-hr)" }} />Frequência cardíaca</span>
                 <span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-full" style={{ background: "var(--vital-spo2)" }} />Saturação</span>
               </div>
-              <svg viewBox="0 0 300 60" className="h-28 w-full" role="img" aria-label="Gráfico ilustrativo das últimas medições">
+              <svg viewBox="0 0 300 60" className="h-28 w-full" role="img" aria-label="Gráfico das últimas medições recebidas">
                 <path d="M8 15H292M8 30H292M8 45H292" stroke="var(--monitor-border)" strokeDasharray="3 4" />
                 <polyline className="monitor-trace" points={points(selected.history.map((sample) => sample.heartRate), 45, 125)} fill="none" stroke="var(--vital-hr)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 <polyline className="monitor-trace" points={points(selected.history.map((sample) => sample.oxygen), 80, 100)} fill="none" stroke="var(--vital-spo2)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              <p className="mt-1 text-[11px]" style={{ color: "var(--monitor-muted)" }}>Série demonstrativa · atualização a cada 5 segundos · retenção local de até 1 hora</p>
+              <p className="mt-1 text-[11px]" style={{ color: "var(--monitor-muted)" }}>Leituras recebidas do WebSocket · retenção em memória de até 1 hora</p>
             </div>
             <div className="mt-3 rounded-xl border p-3" role={selectedEvents.length ? "alert" : undefined} style={{ background: selectedEvents.length ? "var(--alert-surface)" : "var(--background)", borderColor: selectedEvents.length ? "var(--alert-border)" : "var(--border)" }}>
-              <h3 className="text-xs font-bold" style={{ color: "var(--foreground)" }}>Verificação demonstrativa de limites</h3>
+              <h3 className="text-xs font-bold" style={{ color: "var(--foreground)" }}>Verificação de limites</h3>
               {selectedEvents.length ? (
                 <ul className="mt-2 space-y-2 text-xs" style={{ color: "var(--alert-foreground)" }}>
                   {selectedEvents.map((event) => {
@@ -774,7 +675,7 @@ export default function VitalMonitoring({ patients, profile, storageKey, acknowl
                   <li className="pt-1 font-semibold">Nível visual: {isCritical(selected) ? "Crítico" : "Moderado"}</li>
                 </ul>
               ) : (
-                <p className="mt-1 text-xs" style={{ color: "var(--muted-foreground)" }}>Nenhum limite configurado foi ultrapassado nesta simulação.</p>
+                <p className="mt-1 text-xs" style={{ color: "var(--muted-foreground)" }}>Nenhum limite configurado foi ultrapassado nos dados recebidos.</p>
               )}
             </div>
             <details className="mt-3 rounded-xl border p-3" style={{ background: "var(--background)", borderColor: "var(--border)" }}>
@@ -838,7 +739,7 @@ export default function VitalMonitoring({ patients, profile, storageKey, acknowl
       </div>
 
       <p className="rounded-lg border px-3 py-2.5 text-xs leading-relaxed" style={{ background: "var(--warning-surface)", borderColor: "color-mix(in srgb, var(--warning) 35%, transparent)", color: "var(--warning-foreground)" }}>
-        Demonstração: medições, alertas e conexões são simulados no navegador e não devem ser usados para decisões clínicas.
+        Os valores exibidos vêm da última leitura recebida pela API/WebSocket. Uma conexão fica offline após 15 segundos sem atualização.
       </p>
     </section>
   )

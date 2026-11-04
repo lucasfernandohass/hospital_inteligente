@@ -19,9 +19,16 @@ import { APPOINTMENT_STORAGE_KEY, DOCTOR_DEMO_ID, formatLongLocalDate, includeDo
 import { HOSPITALIZATION_STORAGE_KEY, type Hospitalization } from "./hospitalizationStore"
 import useLocalStorageState from "./useLocalStorageState"
 import { BED_STORAGE_KEY, initialRegisteredBeds, initialRegisteredPatients, normalizeRegisteredBeds, PATIENT_STORAGE_KEY, type RegisteredBed, type RegisteredPatient } from "./patientStore"
+import { usePanelRoute } from "../hooks/usePanelRoute"
+import { api, ApiError } from "../services/api"
+import { mapBed, mapInternment, mapPatient } from "../services/mappers"
+import { mapPrescriptions } from "../services/mappers"
+import { useVitalFeed } from "../hooks/useVitalFeed"
 
 interface Props {
   onNavigate: (screen: Screen) => void
+  token: string
+  userName: string
   theme: Theme
   onToggleTheme: () => void
 }
@@ -365,16 +372,6 @@ const internacoes = [
   },
 ]
 
-const vitalsData = [
-  { label: "Seg", bp: 128 },
-  { label: "Ter", bp: 135 },
-  { label: "Qua", bp: 122 },
-  { label: "Qui", bp: 140 },
-  { label: "Sex", bp: 118 },
-  { label: "Sáb", bp: 130 },
-  { label: "Dom", bp: 125 },
-]
-
 const riskColor = {
   low: { bg: "var(--success-surface)", text: "var(--success-foreground)", dot: "var(--success)", label: "Estável" },
   medium: { bg: "var(--warning-surface)", text: "var(--warning-foreground)", dot: "var(--warning)", label: "Atenção" },
@@ -383,18 +380,43 @@ const riskColor = {
 
 export default function DoctorDashboard({
   onNavigate,
+  token,
+  userName,
   theme,
   onToggleTheme,
 }: Props) {
-  const [registeredPatients] = useLocalStorageState<RegisteredPatient[]>(PATIENT_STORAGE_KEY, initialRegisteredPatients)
-  const [registeredBeds, setRegisteredBeds] = useLocalStorageState<RegisteredBed[]>(BED_STORAGE_KEY, initialRegisteredBeds)
-  useEffect(() => setRegisteredBeds((current) => normalizeRegisteredBeds(current)), [setRegisteredBeds])
-  const [hospitalizations, setHospitalizations] = useLocalStorageState<Hospitalization[]>(HOSPITALIZATION_STORAGE_KEY, [])
-  const [receptionAppointments, setReceptionAppointments] = useLocalStorageState<ReceptionAppointment[]>(APPOINTMENT_STORAGE_KEY, initialReceptionAppointments)
-  useEffect(() => setReceptionAppointments((current) => includeDoctorDemoAppointments(current)), [setReceptionAppointments])
+  const [registeredPatients, setRegisteredPatients] = useState<RegisteredPatient[]>([])
+  const [registeredBeds, setRegisteredBeds] = useState<RegisteredBed[]>([])
+  const [hospitalizations, setHospitalizations] = useState<Hospitalization[]>([])
+  const [receptionAppointments, setReceptionAppointments] = useState<ReceptionAppointment[]>([])
+  const [apiPrescriptions, setApiPrescriptions] = useState<SharedPrescription[]>([])
+  const [dataLoading, setDataLoading] = useState(true)
+  const [dataError, setDataError] = useState("")
+  useEffect(() => {
+    let active = true
+    setDataLoading(true)
+    Promise.all([api.listPatients(token), api.listBeds(token), api.listInternments(token), api.listAppointments(token), api.listDoctors(token), api.listPrescriptions(token), api.listPrescriptionItems(token), api.listMedications(token)])
+      .then(([patientsDto, bedsDto, internmentsDto, appointmentsDto, doctors, prescriptions, items, medications]) => {
+        if (!active) return
+        const patients = patientsDto.map(mapPatient)
+        setRegisteredPatients(patients)
+        setRegisteredBeds(bedsDto.map((bed) => mapBed(bed, internmentsDto)))
+        setHospitalizations(internmentsDto.map((item) => mapInternment(item, bedsDto, doctors)))
+        setReceptionAppointments(appointmentsDto.map((item) => ({
+          id: String(item.id), medicoId: String(item.medicoId), data: item.data, hora: item.horario.slice(0, 5),
+          paciente: patients.find((patient) => patient.id === String(item.pacienteId))?.nome ?? `Paciente ${item.pacienteId}`,
+          pacienteId: String(item.pacienteId), status: item.status.toLowerCase().includes("conclu") ? "Concluída" : "Agendada",
+        })))
+        setApiPrescriptions(mapPrescriptions(prescriptions, items, medications, doctors))
+        setDataError("")
+      })
+      .catch((error) => { if (active) setDataError(error instanceof ApiError ? error.message : "Não foi possível carregar dados da API.") })
+      .finally(() => { if (active) setDataLoading(false) })
+    return () => { active = false }
+  }, [token])
   const pacientes = useMemo(() => {
     const knownIds = new Set(pacientesBase.map((patient) => patient.id))
-    const synchronizedBase = pacientesBase.map((patient) => {
+    const synchronizedBase = pacientesBase.filter((patient) => registeredPatients.some((item) => item.id === patient.id)).map((patient) => {
       const registered = registeredPatients.find((item) => item.id === patient.id)
       const occupiedBed = registeredBeds.find((bed) => bed.status === "Ocupado" && bed.pacienteId === patient.id)
       const admission = hospitalizations.find((item) => item.pacienteId === patient.id && item.status === "Ativa")
@@ -441,7 +463,13 @@ export default function DoctorDashboard({
       })
     return [...synchronizedBase, ...additions]
   }, [hospitalizations, registeredBeds, registeredPatients])
-  const [activeTab, setActiveTab] = useState<Tab>("overview")
+  const monitorPatients = useMemo(() => pacientes.filter((patient) => registeredBeds.some((bed) => bed.status === "Ocupado" && bed.pacienteId === patient.id)).map((patient) => {
+    const bed = registeredBeds.find((item) => item.status === "Ocupado" && item.pacienteId === patient.id)
+    return { id: patient.id, name: patient.nome, bed: bed?.numero ?? patient.leito, sector: bed?.setor ?? bed?.tipo ?? patient.setor, condition: patient.condicao }
+  }), [pacientes, registeredBeds])
+  const { readings: liveVitals } = useVitalFeed(monitorPatients.map((patient) => patient.id), token)
+  const vitalsData = Object.entries(liveVitals).flatMap(([patientId, reading]) => reading.systolic === undefined ? [] : [{ label: pacientes.find((patient) => patient.id === patientId)?.nome ?? patientId, bp: reading.systolic }])
+  const [activeTab, setActiveTab] = usePanelRoute("medico", ["overview", "atendimento", "monitoramento", "prescricao", "exames", "agenda", "internacao", "atividades", "alertas"] as const, "overview")
   const [selectedPaciente, setSelectedPaciente] =
     useState<typeof pacientes[0] | null>(null)
   useEffect(() => {
@@ -501,14 +529,17 @@ export default function DoctorDashboard({
     return patient.status
   }
 
-  const alertas = clinicalAlertRecords
+  const alertas = clinicalAlertRecords.filter((alert) => pacientes.some((patient) => patient.id === alert.pacienteId))
 
   const alertasPendentes = alertas.filter((a) => !alertasReconhecidos.includes(a.id))
-  const maxBP = Math.max(...vitalsData.map((d) => d.bp))
+  const maxBP = Math.max(1, ...vitalsData.map((d) => d.bp))
   const patientSectors = [...new Set(pacientes.map((patient) => patient.setor))]
   const patientBeds = [...new Set(pacientes.map((patient) => patient.leito).filter((bed) => bed !== "—"))]
   const todasPrescricoes = [
-    ...prescricoes,
+    ...apiPrescriptions.map((prescription) => ({
+      id: prescription.id, pacienteId: prescription.pacienteId, data: prescription.data, medico: prescription.medico,
+      itens: [{ ...prescription.item, status: "pendente" as const }],
+    })),
     ...prescricoesLocais.map((prescription) => ({
       id: prescription.id,
       pacienteId: prescription.pacienteId,
@@ -517,7 +548,7 @@ export default function DoctorDashboard({
       itens: [prescription.item],
     })),
   ]
-  const todosExames = [...exames, ...examesLocais]
+  const todosExames = examesLocais
   const selectedLatestVitals = selectedPaciente
     ? evolucoesClinicas[selectedPaciente.id]?.find((entry) => entry.fc !== undefined || entry.temp !== undefined || entry.spo2 !== undefined || entry.pressao !== undefined) ?? registrosClinicos[selectedPaciente.id]?.[0]
     : undefined
@@ -598,7 +629,7 @@ export default function DoctorDashboard({
       id: "RX-LOCAL-" + id,
       pacienteId: paciente.id,
       data: new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).format(new Date()),
-      medico: "Dr. Pedro Campos",
+      medico: userName,
       item: {
         id: "IP-LOCAL-" + id,
         medicamento: prescriptionForm.medicamento.trim(),
@@ -669,7 +700,7 @@ export default function DoctorDashboard({
       data: new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(new Date(examForm.data + "T12:00:00")),
       status: "agendado",
       resultado: null,
-      solicitante: "Dr. Pedro Campos",
+      solicitante: userName,
       hora: examForm.hora || "A definir",
     }
     setExamesLocais((current) => [request, ...current])
@@ -697,7 +728,7 @@ export default function DoctorDashboard({
       data: new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date()),
       descricao: description,
       perfil: "Médico" as const,
-      profissional: "Dr. Pedro Campos",
+      profissional: userName,
     }
     setEvolucoesClinicas((current) => ({
       ...current,
@@ -770,8 +801,8 @@ export default function DoctorDashboard({
     else groups.push({ data: item.data, itens: [item] })
     return groups
   }, [])
-  const mediaPressao = Math.round(vitalsData.reduce((total, day) => total + day.bp, 0) / vitalsData.length)
-  const picoPressao = vitalsData.reduce((peak, day) => (day.bp > peak.bp ? day : peak), vitalsData[0])
+  const mediaPressao = vitalsData.length ? Math.round(vitalsData.reduce((total, day) => total + day.bp, 0) / vitalsData.length) : 0
+  const picoPressao = vitalsData.reduce((peak, day) => (day.bp > peak.bp ? day : peak), { label: "—", bp: 0 })
   const itemHorario = (item: object) => ("horario" in item && typeof item.horario === "string" ? item.horario : "")
   const inputStyle = { background: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }
   const labelClass = "flex min-w-0 flex-col gap-1.5 text-xs font-semibold"
@@ -782,8 +813,8 @@ export default function DoctorDashboard({
       <DashboardSidebar
         role="Médico"
         initials="PC"
-        name="Dr. Pedro Campos"
-        detail="Cardiologista · CRM 45.231"
+        name={userName}
+        detail="Médico"
         tabs={tabs}
         activeTab={activeTab}
         onSelect={(key) => setActiveTab(key as Tab)}
@@ -796,9 +827,9 @@ export default function DoctorDashboard({
         <DashboardHeader
           role="Médico"
           section={activeTabInfo?.label ?? ""}
-          name="Dr. Pedro Campos"
-          detail="Cardiologista · CRM 45.231"
-          initials="PC"
+          name={userName}
+          detail="Médico"
+          initials={userName.split(" ").filter(Boolean).map((part) => part[0]).slice(0, 2).join("").toUpperCase()}
           theme={theme}
           onToggleTheme={onToggleTheme}
           alertCount={alertasPendentes.length + monitoringPendingCount}
@@ -807,6 +838,8 @@ export default function DoctorDashboard({
 
         <SectionContext.Provider value={{ key: activeTab, label: activeTabInfo?.label ?? "", group: activeTabInfo?.group, role: "Painel médico" }}>
         <main className="dashboard-main mx-auto w-full min-w-0 max-w-[1400px] flex-1 px-4 pb-36 pt-20 sm:px-6 sm:pb-24 xl:p-8">
+          {dataLoading && <p role="status" className="mb-4 rounded-xl border px-4 py-3 text-sm" style={{ background: "var(--secondary)", borderColor: "var(--border)", color: "var(--muted-foreground)" }}>Carregando dados da API…</p>}
+          {dataError && <p role="alert" className="mb-4 rounded-xl border px-4 py-3 text-sm" style={{ background: "var(--danger-surface)", borderColor: "var(--border)", color: "var(--danger-foreground)" }}>{dataError}</p>}
           <div className={activeTab === "monitoramento" ? "block" : "hidden"} aria-hidden={activeTab !== "monitoramento"}>
             <VitalMonitoring
               profile="Médico"
@@ -814,17 +847,8 @@ export default function DoctorDashboard({
               onAlertsChange={setMonitoringAlerts}
               acknowledgedAlerts={monitoringAcknowledged}
               setAcknowledgedAlerts={setMonitoringAcknowledged}
-              patients={pacientes.filter((patient) => registeredBeds.some((bed) => bed.status === "Ocupado" && bed.pacienteId === patient.id)).map((patient) => {
-                const occupiedBed = registeredBeds.find((bed) => bed.status === "Ocupado" && bed.pacienteId === patient.id)
-                return {
-                  id: patient.id,
-                  name: patient.nome,
-                  bed: occupiedBed?.numero ?? patient.leito,
-                  sector: occupiedBed?.setor ?? occupiedBed?.tipo ?? patient.setor,
-                  condition: patient.condicao,
-                  bloodPressure: latestVitalsFor(patient.id)?.pressao,
-                }
-              })}
+              patients={monitorPatients}
+              liveVitals={liveVitals}
             />
           </div>
           {activeTab === "overview" && (
@@ -1152,7 +1176,7 @@ export default function DoctorDashboard({
                               <textarea required value={evolutionDraft} onChange={(event) => setEvolutionDraft(event.target.value)} rows={4} placeholder="Registre a avaliação, conduta ou observação clínica" className="min-h-24 rounded-lg border p-3 text-sm font-normal" style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--foreground)" }} />
                             </label>
                             <div className="flex flex-wrap items-center justify-between gap-2">
-                              <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>Autor: Dr. Pedro Campos · data e hora automáticas</span>
+                              <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>Autor: {userName} · data e hora automáticas</span>
                               <div className="flex gap-2">
                                 <button type="button" onClick={() => { setShowEvolutionForm(false); setEvolutionDraft("") }} className="min-h-10 rounded-lg px-4 text-sm font-semibold" style={{ background: "var(--secondary)", color: "var(--primary)" }}>Cancelar</button>
                                 <button type="submit" disabled={!evolutionDraft.trim()} className="min-h-10 rounded-lg px-4 text-sm font-semibold" style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}>Salvar evolução</button>
