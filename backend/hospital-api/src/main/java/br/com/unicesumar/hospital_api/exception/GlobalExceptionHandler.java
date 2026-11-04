@@ -10,10 +10,14 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.stream.Collectors;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
     
     @ExceptionHandler(ResourceNotFoundException.class)
     ProblemDetail naoEncontrado(ResourceNotFoundException e) { return detalhe(HttpStatus.NOT_FOUND, e.getMessage()); }
@@ -49,6 +53,9 @@ public class GlobalExceptionHandler {
     ProblemDetail estadoInvalido(IllegalStateException e) { return detalhe(HttpStatus.CONFLICT, e.getMessage()); }
     
     @ExceptionHandler(Exception.class)
-    ProblemDetail inesperado(Exception e) { return detalhe(HttpStatus.INTERNAL_SERVER_ERROR, "Ocorreu um erro inesperado"); }
+    ProblemDetail inesperado(Exception e, HttpServletRequest request) {
+        logger.error("Erro inesperado em {} {}", request.getMethod(), request.getRequestURI(), e);
+        return detalhe(HttpStatus.INTERNAL_SERVER_ERROR, "Ocorreu um erro inesperado");
+    }
     private ProblemDetail detalhe(HttpStatus status, String mensagem) { return ProblemDetail.forStatusAndDetail(status, mensagem); }
 }

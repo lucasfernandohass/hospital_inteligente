@@ -5,11 +5,11 @@ import java.time.*;
 
 public final class DomainRequestDTOs {
     private DomainRequestDTOs() {}
-    public record Paciente(@NotBlank @Size(max=150) String nome, @NotBlank @Pattern(regexp="\\d{11}") String cpf, @NotNull @Past LocalDate dataNascimento, String telefone, String endereco, @NotBlank @Size(max=20) String numeroProntuario, @NotBlank @Size(max=100) String convenio) {}
+    public record Paciente(@NotBlank @Size(max=150) String nome, @NotBlank @Pattern(regexp="\\d{11}") String cpf, @NotNull @Past LocalDate dataNascimento, String telefone, String endereco, @NotBlank @Size(max=20) String numeroProntuario, @NotBlank @Size(max=100) String convenio, @Size(max=20) String sexo) {}
     public record Medicamento(@NotBlank @Size(max=150) String nome, @NotBlank @Size(max=50) String dosagem, @NotNull Boolean ativo) {}
-    public record Leito(@NotBlank @Size(max=20) String numero, @NotNull Integer andar, @NotBlank @Size(max=20) String quarto, @NotBlank @Size(max=50) String tipo, @NotBlank @Size(max=30) String status, String observacao) {}
+    public record Leito(@NotBlank @Size(max=20) String numero, @NotNull Integer andar, @NotBlank @Size(max=20) String quarto, @NotBlank @Size(max=50) String tipo, @NotBlank @Size(max=30) String status, String observacao, @Size(max=80) String setor) {}
     public record Atendimento(@NotNull LocalDateTime data, @NotBlank @Size(max=50) String tipo, @NotBlank @Size(max=500) String descricao, @NotBlank @Size(max=30) String status, Long leitoId, @NotNull Long pacienteId, @NotNull Long funcionarioResponsavelId, @NotNull Long medicoResponsavelId) {}
-    public record Internacao(@NotNull Long pacienteId, @NotNull Long leitoId, @NotNull LocalDate dataInternacao, LocalDate dataPrevistaAlta, LocalDate dataAlta, @NotBlank @Size(max=500) String motivo, @NotBlank @Size(max=30) String status, String observacoes) {}
+    public record Internacao(@NotNull Long pacienteId, @NotNull Long leitoId, Long medicoId, @NotNull LocalDate dataInternacao, LocalDate dataPrevistaAlta, LocalDate dataAlta, @NotBlank @Size(max=500) String motivo, @NotBlank @Size(max=30) String status, String observacoes) {}
     public record AgendaMedica(@NotNull Long medicoId, @NotNull LocalDateTime horaInicio, @NotNull LocalDateTime horaFim, @NotBlank @Size(max=30) String status, @NotBlank @Size(max=80) String tipoConsulta, String observacoes) {}
     public record Agendamento(@NotNull Long pacienteId, @NotNull Long medicoId, @NotNull LocalDate data, @NotNull LocalTime horario, @NotNull @Positive Integer duracao, @NotBlank @Size(max=30) String status, @NotBlank @Size(max=80) String tipo, String observacoes) {}
     public record Prescricao(@NotNull LocalDateTime data, String observacao, @NotBlank @Size(max=30) String status, @NotNull Long pacienteId, @NotNull Long medicoId, @NotNull Long atendimentoId) {}
