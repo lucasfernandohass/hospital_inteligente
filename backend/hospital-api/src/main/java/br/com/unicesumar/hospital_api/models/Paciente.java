@@ -24,4 +24,7 @@ public class Paciente extends Pessoa {
 
     @Column(nullable = false, length = 100)
     private String convenio;
+
+    @Column(length = 20)
+    private String sexo;
 }

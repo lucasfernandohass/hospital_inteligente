@@ -45,7 +45,7 @@ Request:
 ```json
 {
   "nome": "Administradora do Hospital",
-  "cpf": "12345678901",
+  "cpf": "67745777097",
   "dataNascimento": "1985-04-20",
   "telefone": "44999990000",
   "endereco": "Rua Central, 100",
@@ -83,6 +83,61 @@ Resposta `201 Created`: token Bearer e dados públicos do administrador. Guarde 
 ```
 
 Se o administrador inicial já existir, a resposta é `409 Conflict`. E-mail e CPF duplicados também retornam `409`.
+
+### Registro de atividades
+
+Os funcionários autenticados podem consultar e registrar atividades em `GET /api/atividades` e `POST /api/atividades`. O backend associa cada novo registro ao funcionário do token; o cliente não envia nem escolhe o autor. Cada funcionário recebe apenas os próprios registros. Para `ADMINISTRADOR`, a consulta retorna as atividades de todos os funcionários.
+
+Request de `POST /api/atividades`:
+
+```json
+{
+  "acao": "Agendamento criado",
+  "entidade": "Consulta",
+  "detalhes": "Agendamento 42 · 2026-11-16 14:30"
+}
+```
+
+`detalhes` é opcional. A resposta inclui o funcionário associado e o horário gerado pelo servidor. Os registros são persistidos no banco e permanecem disponíveis após a exclusão da conta, com nome e função preservados para auditoria.
+
+### Inserir dataset de demonstração
+
+`POST /api/admin/dados-teste` exige token de `ADMINISTRADOR` e confirmação explícita no corpo. Ele insere funcionários, pacientes, leitos, internações ativas e agendamentos definidos em [`InsertData.md`](./InsertData.md). O arquivo contém JSON puro e pode ser enviado diretamente à API.
+
+PowerShell, executado a partir de `backend/hospital-api`:
+
+```powershell
+$token = "TOKEN_DO_ADMINISTRADOR"
+$json = Get-Content ..\InsertData.md -Raw
+Invoke-RestMethod -Method Post -Uri "http://localhost:8080/api/admin/dados-teste" -Headers @{ Authorization = "Bearer $token" } -ContentType "application/json" -Body $json
+```
+
+O endpoint pode ser chamado em qualquer ambiente, inclusive remoto. Use uma conta administradora e revise o dataset antes de enviá-lo: ele cria registros de demonstração no banco e não os remove depois. A operação é idempotente para os identificadores do arquivo: contas existentes por e-mail, pacientes por número de prontuário, leitos já cadastrados, internações ativas correspondentes e agendamentos com a mesma `chave` são mantidos sem duplicação. Conflitos com outro perfil, CPF, prontuário ou internação geram erro em vez de alterar os dados existentes.
+
+Todos os usuários do dataset usam `SenhaLocalForte123`, inclusive o administrador, como no exemplo de `/api/auth/setup`. Se o campo `senha` for omitido de um usuário novo, a API usa essa mesma senha padrão. Contas que já existam por e-mail não têm a senha alterada; se precisar aplicar a senha padrão a uma carga anterior, recrie o banco de teste ou redefina a senha pela administração.
+
+Resposta `200 OK`: contagens dos registros criados e situação de cada conta. `senhaTemporaria` fica `null` quando a senha já foi informada no arquivo.
+
+```json
+{
+  "funcionariosCriados": 3,
+  "pacientesCriados": 3,
+  "leitosCriados": 3,
+  "internacoesCriadas": 2,
+  "agendamentosCriados": 1,
+  "contas": [
+    {
+      "nome": "Otavio Alves Brisky",
+      "email": "otavio@gmail.com",
+      "role": "RECEPCIONISTA",
+      "resultado": "CRIADO",
+      "senhaTemporaria": null
+    }
+  ]
+}
+```
+
+As datas do dataset são relativas à execução: internações usam `diasDesdeInternacao` e `diasAteAltaPrevista`; agendamentos usam `diasAteAgendamento`. Assim, novos registros continuam aparecendo como atuais mesmo quando o arquivo for reutilizado mais tarde.
 
 #### Login
 

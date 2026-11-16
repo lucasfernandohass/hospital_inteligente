@@ -33,4 +33,7 @@ public class Leito {
 
     @Column(length = 500, nullable = true)
     private String observacao;
+
+    @Column(length = 80)
+    private String setor;
 }

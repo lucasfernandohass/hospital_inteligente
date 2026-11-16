@@ -24,6 +24,9 @@ public class Internacao {
     @Column(name = "leito_id", nullable = false)
     private Long leitoId;
 
+    @Column(name = "medico_id")
+    private Long medicoId;
+
     @Column(name = "data_internacao", nullable = false)
     private LocalDate dataInternacao;
 

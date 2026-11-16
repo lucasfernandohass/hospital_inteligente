@@ -1,6 +1,7 @@
 package br.com.unicesumar.hospital_api.controllers;
 
 import br.com.unicesumar.hospital_api.dtos.request.CriarFuncionarioRequest;
+import br.com.unicesumar.hospital_api.dtos.request.AtualizarFuncionarioRequest;
 import br.com.unicesumar.hospital_api.dtos.response.FuncionarioResponseDTO;
 import br.com.unicesumar.hospital_api.services.FuncionarioService;
 import jakarta.validation.Valid;
@@ -19,6 +20,6 @@ public class FuncionarioController {
     @GetMapping("/{id}") public FuncionarioResponseDTO buscar(@PathVariable Long id) { return service.buscar(id); }
     @PostMapping @ResponseStatus(HttpStatus.CREATED)
     public FuncionarioResponseDTO criar(@Valid @RequestBody CriarFuncionarioRequest request) { return service.criar(request); }
-    @PutMapping("/{id}") public FuncionarioResponseDTO atualizar(@PathVariable Long id, @Valid @RequestBody CriarFuncionarioRequest request) { return service.atualizar(id, request); }
+    @PutMapping("/{id}") public FuncionarioResponseDTO atualizar(@PathVariable Long id, @Valid @RequestBody AtualizarFuncionarioRequest request) { return service.atualizar(id, request); }
     @DeleteMapping("/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) public void excluir(@PathVariable Long id) { service.excluir(id); }
 }

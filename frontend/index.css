@@ -1,0 +1,1014 @@
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import 'tailwindcss';
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 4px);
+
+  --font-sans: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+/* ==========================================================================
+   Tokens visuais
+   Base: identidade visual do projeto (docs/Identidade_visual)
+   Azul profundo #0D1B2A · Azul claro #F0F4F8 · Azul médio #1E4F86 · Ciano #00A6A6
+   ========================================================================== */
+:root {
+  color-scheme: light;
+
+  --background: #F2F6FA;
+  --foreground: #0D1B2A;
+
+  --card: #FFFFFF;
+  --card-foreground: #0D1B2A;
+
+  --primary: #1E4F86;
+  --primary-hover: #183F6C;
+  --primary-foreground: #FFFFFF;
+
+  --secondary: #EAF1F8;
+  --secondary-foreground: #0D1B2A;
+
+  --muted: #E1E9F2;
+  --muted-foreground: #556B82;
+
+  --accent: #00827F;
+  --accent-bright: #00A6A6;
+  --accent-foreground: #FFFFFF;
+
+  --border: #D6E0EB;
+  --border-strong: #BFCDDC;
+  --ring: #1E4F86;
+  --focus-ring: rgba(30, 79, 134, 0.22);
+
+  --radius: 12px;
+
+  /* Estados clínicos */
+  --success: #12A383;
+  --success-surface: #E5F6F1;
+  --success-foreground: #0A7560;
+  --warning: #E9A21B;
+  --warning-surface: #FFF5DF;
+  --warning-foreground: #915A00;
+  --danger: #E5484D;
+  --danger-surface: #FDECEC;
+  --danger-foreground: #B42318;
+  --info: #3B82C4;
+  --neutral: #8A97A8;
+  --neutral-surface: #EFF2F6;
+  --neutral-foreground: #56657A;
+  --violet: #7C5CC4;
+
+  --alert-surface: #FFF7F5;
+  --alert-border: #F4CFC7;
+  --alert-foreground: #B42318;
+  --alert-icon-bg: #FDECEC;
+  --control-foreground: #1E4F86;
+
+  /* Navegação lateral (sempre azul profundo) */
+  --nav-bg: #0D1B2A;
+  --nav-surface: #132A40;
+  --nav-border: rgba(255, 255, 255, 0.08);
+  --nav-foreground: #E6EEF6;
+  --nav-muted: #93A9BF;
+  --nav-active: rgba(0, 166, 166, 0.16);
+
+  /* Módulo de monitoramento (estética de monitor) */
+  --monitor-bg: #07121E;
+  --monitor-panel: #0C1B2B;
+  --monitor-border: #1B3149;
+  --monitor-grid: rgba(56, 214, 245, 0.08);
+  --monitor-text: #E7F1FA;
+  --monitor-muted: #86A0B8;
+  --vital-hr: #35E08F;
+  --vital-spo2: #3DD6F5;
+  --vital-rr: #F5D547;
+  --vital-temp: #FFA45C;
+  --vital-bp: #C9B6FF;
+  --vital-alarm: #FF5D5D;
+  /* Fundo de contadores e selos com texto branco (contraste >= 4,5:1 nos dois temas) */
+  --badge-danger: #B42318;
+
+  --shadow-xs: 0 1px 2px rgba(13, 27, 42, 0.05);
+  --shadow-sm: 0 1px 2px rgba(13, 27, 42, 0.04), 0 2px 6px rgba(13, 27, 42, 0.05);
+  --shadow-md: 0 4px 10px rgba(13, 27, 42, 0.06), 0 12px 28px rgba(13, 27, 42, 0.08);
+  --shadow-lg: 0 18px 50px rgba(13, 27, 42, 0.18);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --background: #08131F;
+  --foreground: #E6EEF6;
+
+  --card: #0F2133;
+  --card-foreground: #E6EEF6;
+
+  --primary: #2F6FB5;
+  --primary-hover: #3A7FC8;
+  --primary-foreground: #FFFFFF;
+
+  --secondary: #16304A;
+  --secondary-foreground: #E6EEF6;
+
+  --muted: #1C3852;
+  --muted-foreground: #A2B7CB;
+
+  --accent: #14B8B0;
+  --accent-bright: #2DD4CA;
+  --accent-foreground: #04201E;
+
+  --border: #23405B;
+  --border-strong: #2F5272;
+  --ring: #6CB4EC;
+  --focus-ring: rgba(108, 180, 236, 0.3);
+
+  --success: #2BC79F;
+  --success-surface: #0F3330;
+  --success-foreground: #6FE3C3;
+  --warning: #F2B33D;
+  --warning-surface: #3A2C10;
+  --warning-foreground: #F8CB72;
+  --danger: #FF6B6B;
+  --danger-surface: #3B1B1E;
+  --danger-foreground: #FF9C94;
+  --info: #6CB4EC;
+  --neutral: #7F93AA;
+  --neutral-surface: #1A2E43;
+  --neutral-foreground: #AFC0D1;
+  --violet: #A88BF0;
+
+  --alert-surface: #2A1B1E;
+  --alert-border: #5E3036;
+  --alert-foreground: #FF9C94;
+  --alert-icon-bg: #45232A;
+  --control-foreground: #8CCBF5;
+
+  --nav-bg: #06101A;
+  --nav-surface: #0E2134;
+  --nav-border: rgba(255, 255, 255, 0.07);
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25), 0 2px 8px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 6px 16px rgba(0, 0, 0, 0.3), 0 14px 32px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+:root[data-theme="dark"] .app-logo {
+  filter: brightness(0) invert(1);
+}
+
+:root[data-theme="dark"] [style*="color: var(--primary)"] {
+  color: var(--control-foreground) !important;
+}
+
+:root:not([data-theme="dark"]) .app-logo {
+  filter: brightness(1.15) saturate(1.1);
+}
+
+/* O logo sobre fundos azul-marinho (sidebar e login) é sempre claro */
+.app-logo-on-dark {
+  filter: brightness(0) invert(1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  font-feature-settings: "cv11", "ss01";
+  background-color: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent-bright) 30%, transparent);
+}
+
+/* Foco visível e consistente para navegação por teclado */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+button:not(:disabled),
+summary,
+[role="button"] {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 99px;
+}
+
+*:hover::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  background-clip: padding-box;
+}
+
+/* ==========================================================================
+   Camada de componentes dos painéis
+   Os painéis usam estilos inline com tokens (var(--card), var(--border)...).
+   As regras abaixo padronizam profundidade, controles, botões e tabelas
+   sem alterar a lógica dos componentes.
+   ========================================================================== */
+
+/* Superfícies (cards) recebem sombra discreta */
+.dashboard-main :is(div, article, section, form, aside, details, li)[style*="background: var(--card)"] {
+  box-shadow: var(--shadow-sm);
+}
+
+.dashboard-main button[style*="background: var(--card)"][style*="border"] {
+  box-shadow: var(--shadow-xs);
+}
+
+/* Campos de formulário */
+.dashboard-main :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea) {
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.dashboard-main :is(input, select, textarea):hover:not(:disabled):not(:focus) {
+  border-color: var(--border-strong) !important;
+}
+
+.dashboard-main :is(input, select, textarea):focus,
+.dashboard-main :is(input, select, textarea):focus-visible {
+  outline: none;
+  border-color: var(--ring) !important;
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.dashboard-main :is(input, textarea)::placeholder {
+  color: var(--muted-foreground);
+  opacity: 0.75;
+}
+
+.dashboard-main :is(input, select, textarea):disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.dashboard-main textarea {
+  line-height: 1.5;
+}
+
+.dashboard-main input[type="checkbox"],
+.dashboard-main input[type="radio"] {
+  accent-color: var(--accent);
+  width: 1rem;
+  height: 1rem;
+}
+
+/* Botões: estados de interação coerentes */
+.dashboard-main button {
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease, transform 0.15s ease;
+}
+
+.dashboard-main button[style*="background: var(--primary)"]:hover:not(:disabled),
+.dashboard-main button[style*="background: var(--accent)"]:hover:not(:disabled) {
+  filter: brightness(1.1);
+  box-shadow: var(--shadow-sm);
+}
+
+.dashboard-main button[style*="background: var(--primary)"]:active:not(:disabled),
+.dashboard-main button[style*="background: var(--accent)"]:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.dashboard-main button[style*="background: var(--secondary)"]:hover:not(:disabled) {
+  background: var(--muted) !important;
+}
+
+.dashboard-main button:disabled {
+  opacity: 0.55;
+}
+
+/* Tabelas */
+.dashboard-main table {
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-main thead th {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.dashboard-main tbody td {
+  vertical-align: middle;
+}
+
+.dashboard-main tbody tr {
+  transition: background-color 0.12s ease;
+}
+
+.dashboard-main tbody tr:hover {
+  background: color-mix(in srgb, var(--secondary) 55%, transparent);
+}
+
+/* Detalhes recolhíveis */
+.dashboard-main summary {
+  list-style-position: inside;
+}
+
+.dashboard-main summary::marker {
+  color: var(--muted-foreground);
+}
+
+/* Números alinhados em indicadores */
+.tabular-nums,
+.dashboard-main .font-mono {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ==========================================================================
+   Componentes compartilhados (classes utilitárias próprias)
+   ========================================================================== */
+.ui-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+:root[data-theme="dark"] .ui-eyebrow {
+  color: var(--accent-bright);
+}
+
+.ui-nav-item {
+  position: relative;
+  color: var(--nav-muted);
+}
+
+.ui-nav-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--nav-foreground);
+}
+
+.ui-nav-item[aria-current="page"] {
+  background: var(--nav-active);
+  color: #FFFFFF;
+}
+
+.ui-nav-item[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 4px 4px 0;
+  background: var(--hero-accent, var(--accent-bright));
+}
+
+.ui-nav-item[aria-current="page"] .ui-nav-icon {
+  color: var(--hero-accent, var(--accent-bright));
+}
+
+.ui-nav-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  background-clip: padding-box;
+}
+
+.ui-nav :focus-visible {
+  outline-color: var(--accent-bright);
+}
+
+.ui-icon-button {
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.ui-icon-button:hover {
+  background: var(--secondary) !important;
+  border-color: var(--border-strong) !important;
+}
+
+/* ==========================================================================
+   Personalidade por perfil (mesmo design system, acento diferente)
+   ========================================================================== */
+.role-medico {
+  --role: #1E4F86;
+  --role-strong: #1E4F86;
+  --hero-accent: #7FB8F0;
+  --hero-glow: rgba(47, 111, 181, 0.55);
+}
+
+.role-enfermagem {
+  --role: #00827F;
+  --role-strong: #00706D;
+  --hero-accent: #5FD4D0;
+  --hero-glow: rgba(0, 166, 166, 0.5);
+}
+
+.role-recepcao {
+  --role: #2F6FA8;
+  --role-strong: #245A8A;
+  --hero-accent: #8CCBF5;
+  --hero-glow: rgba(56, 152, 214, 0.5);
+}
+
+:root[data-theme="dark"] .role-medico {
+  --role: #4C8FD6;
+  --role-strong: #9CC8F2;
+}
+
+:root[data-theme="dark"] .role-enfermagem {
+  --role: #22C1B8;
+  --role-strong: #6FE3DA;
+}
+
+:root[data-theme="dark"] .role-recepcao {
+  --role: #4FA3E0;
+  --role-strong: #A6D6F7;
+}
+
+.role-medico,
+.role-enfermagem,
+.role-recepcao {
+  --role-soft: color-mix(in srgb, var(--role) 13%, var(--card));
+}
+
+/* Cabeçalho de página: faixa de acento do perfil */
+.page-header {
+  box-shadow: var(--shadow-sm);
+}
+
+.page-header::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--role), color-mix(in srgb, var(--role) 20%, transparent));
+}
+
+/* Faixa de destaque (telas iniciais) */
+.hero-band {
+  background:
+    radial-gradient(120% 140% at 100% 0%, var(--hero-glow), transparent 55%),
+    linear-gradient(135deg, #0D1B2A 0%, #102A45 70%, #123552 100%);
+  box-shadow: var(--shadow-md);
+}
+
+.hero-band-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 24px 24px;
+  mask-image: linear-gradient(90deg, transparent, #000 60%);
+}
+
+.hero-action {
+  background: rgba(255, 255, 255, 0.1);
+  color: #FFFFFF;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.hero-action:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.hero-action:focus-visible {
+  outline-color: #FFFFFF;
+}
+
+/* Indicadores */
+.stat-card {
+  box-shadow: var(--shadow-sm);
+}
+
+.stat-card::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--stat-accent);
+}
+
+.stat-card-interactive {
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.stat-card-interactive:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--border-strong) !important;
+}
+
+.section-card {
+  box-shadow: var(--shadow-sm);
+}
+
+.quick-action,
+.list-row {
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.quick-action:hover,
+.list-row:hover {
+  border-color: color-mix(in srgb, var(--role) 45%, var(--border)) !important;
+  background: color-mix(in srgb, var(--role) 5%, var(--card)) !important;
+}
+
+.segmented-option:hover:not([aria-pressed="true"]) {
+  color: var(--foreground) !important;
+  background: color-mix(in srgb, var(--card) 55%, transparent) !important;
+}
+
+/* Títulos expansíveis do monitoramento: área de 44 px e foco visível */
+.monitor-summary:hover {
+  background: color-mix(in srgb, var(--secondary) 70%, transparent);
+}
+
+.monitor-summary:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+
+/* Sidebar: grupos */
+.ui-nav-group + .ui-nav-group {
+  margin-top: 1.1rem;
+}
+
+/* Documento (ficha de atendimento) */
+.doc-sheet {
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+}
+
+.doc-sheet .doc-rule {
+  border-color: var(--border);
+}
+
+/* Login */
+.login-input {
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.login-input:focus {
+  outline: none;
+  border-color: var(--ring) !important;
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.login-hero-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+/* Monitor (estética de monitor multiparamétrico) */
+.monitor-screen {
+  background-color: var(--monitor-bg);
+  background-image:
+    linear-gradient(var(--monitor-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--monitor-grid) 1px, transparent 1px);
+  background-size: 18px 18px;
+  border: 1px solid var(--monitor-border);
+  color: var(--monitor-text);
+}
+
+.monitor-tile {
+  background: var(--monitor-panel);
+  border: 1px solid var(--monitor-border);
+  color: var(--monitor-text);
+}
+
+.monitor-value {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+/* Screen transitions */
+.screen-enter {
+  /* sem "forwards": nenhum transform permanece após a animação */
+  animation: screenIn 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.screen-exit {
+  animation: screenOut 0.25s ease-in forwards;
+}
+
+@keyframes screenIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  /* "none" (e não translateY(0)): um transform mantido pelo "forwards"
+     faria os elementos position: fixed (barra móvel, notificações) rolarem com a página */
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes screenOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+.slide-up {
+  animation: slideUp 0.3s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.25s ease forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.drawer-in {
+  animation: drawerIn 0.22s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes drawerIn {
+  from {
+    transform: translateX(-16px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.toast-in {
+  animation: toastIn 0.25s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes toastIn {
+  from {
+    transform: translateY(-8px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Pulse for vitals */
+@keyframes pulse-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+
+  50% {
+    transform: scale(1.12);
+    opacity: 0.4;
+  }
+
+  100% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+}
+
+.pulse-dot {
+  animation: pulse-ring 2s ease-in-out infinite;
+}
+
+@media (max-width: 639px) {
+  button,
+  input,
+  select,
+  textarea {
+    touch-action: manipulation;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  .dashboard-main,
+  .dashboard-main .fade-in {
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
+  .dashboard-main [class~="grid"] > *,
+  .dashboard-main [class~="flex"] > * {
+    min-width: 0;
+  }
+
+  .dashboard-main [class~="p-6"] {
+    padding: 1rem;
+  }
+
+  .dashboard-main [class~="px-6"] {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .dashboard-main [class~="justify-between"][class~="items-start"] {
+    flex-wrap: wrap;
+  }
+
+  .dashboard-main [class~="flex"][class~="gap-2"] {
+    flex-wrap: wrap;
+  }
+
+  .dashboard-main input:not([type="checkbox"]):not([type="radio"]),
+  .dashboard-main select,
+  .dashboard-main textarea {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .dashboard-main table {
+    min-width: 600px;
+  }
+
+  /* Áreas de toque confortáveis no celular */
+  .dashboard-main button {
+    min-height: 40px;
+  }
+}
+
+@media (max-width: 380px) {
+  .dashboard-main {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+
+  .dashboard-main [class~="grid-cols-2"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dashboard-main [class~="grid-cols-3"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* Indicadores curtos continuam em duas colunas (rótulos quebram em 2 linhas) */
+  .dashboard-main .keep-2-cols {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-main .hero-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.ecg-trace {
+  stroke-dasharray: 360;
+  stroke-dashoffset: 360;
+  animation: ecg-draw 2.4s linear infinite;
+}
+
+@keyframes ecg-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .ecg-trace {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
+
+@page {
+  size: A4;
+  margin: 12mm;
+}
+
+@media print {
+  :root,
+  :root[data-theme="dark"] {
+    color-scheme: light !important;
+  }
+
+  html,
+  body,
+  #root,
+  #root > div {
+    background: #fff !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  /* Áreas imprimíveis usam sempre a paleta clara, mesmo no tema escuro */
+  .monitoring-printable,
+  .ficha-printable {
+    --background: #F5F8FB;
+    --foreground: #0D1B2A;
+    --card: #FFFFFF;
+    --secondary: #EEF3F8;
+    --muted: #E1E9F2;
+    --muted-foreground: #4A6075;
+    --border: #D6E0EB;
+    --border-strong: #BFCDDC;
+    --primary: #1E4F86;
+    --control-foreground: #1E4F86;
+    --role: #1E4F86;
+    --role-strong: #1E4F86;
+    --alert-surface: #FFF7F5;
+    --alert-border: #F4CFC7;
+    --alert-foreground: #B42318;
+  }
+
+  /* Evita cortar linhas e blocos entre páginas */
+  .monitoring-printable .monitor-screen,
+  .monitoring-printable details,
+  .monitoring-printable .max-h-56 > div,
+  .ficha-printable section,
+  .ficha-printable header,
+  .ficha-printable .doc-rule {
+    break-inside: avoid;
+  }
+
+  .monitoring-printable,
+  .monitoring-printable *,
+  .ficha-printable,
+  .ficha-printable * {
+    visibility: visible !important;
+  }
+
+  /* Ficha de atendimento: documento em papel branco */
+  .ficha-printable {
+    position: absolute !important;
+    inset: 0 auto auto 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: #fff !important;
+    box-shadow: none !important;
+    animation: none !important;
+    print-color-adjust: exact;
+  }
+
+  .ficha-printable,
+  .ficha-printable * {
+    color: #0d1b2a !important;
+  }
+
+  .ficha-printable .doc-rule {
+    border-color: #c8d3df !important;
+  }
+
+  .no-print,
+  .ficha-printable .no-print {
+    display: none !important;
+  }
+
+  .monitoring-printable {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+    border: 0 !important;
+    background: #fff !important;
+    color: #0d1b2a !important;
+    box-shadow: none !important;
+    print-color-adjust: exact;
+  }
+
+  .monitoring-printable button {
+    display: none !important;
+  }
+
+  .monitoring-printable .max-h-56 {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* Telas escuras do monitor são impressas em fundo claro */
+  .monitoring-printable .monitor-screen,
+  .monitoring-printable .monitor-tile {
+    background: #fff !important;
+    border-color: #c8d3df !important;
+    color: #0d1b2a !important;
+  }
+
+  .monitoring-printable .monitor-screen * {
+    color: #0d1b2a !important;
+  }
+
+  .monitoring-printable .ecg-trace {
+    animation: none !important;
+    stroke-dashoffset: 0 !important;
+  }
+
+  .monitoring-printable .monitor-screen .monitor-trace {
+    stroke: #0d1b2a !important;
+  }
+
+  .monitoring-printable .monitor-screen svg path:not(.monitor-trace) {
+    stroke: #c8d3df !important;
+  }
+}

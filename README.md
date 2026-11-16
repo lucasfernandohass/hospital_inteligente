@@ -1,82 +1,35 @@
 # Hospital Inteligente
 
 ![Status](https://img.shields.io/badge/status-Em_desenvolvimento-yellow)
-![Platform](https://img.shields.io/badge/platform-Web%20%7C%20Mobile-lightgrey)
+![Plataforma](https://img.shields.io/badge/plataforma-Web-lightgrey)
+![Backend](https://img.shields.io/badge/backend-Spring%20Boot-green)
+![Frontend](https://img.shields.io/badge/frontend-React%20%7C%20TypeScript-blue)
 
----
 
-## Sobre o Projeto
+## Sobre o projeto
 
-O **Hospital Inteligente** é uma plataforma web desenvolvida para o monitoramento remoto e em tempo real de pacientes hospitalizados por meio da integração de dispositivos da Internet das Coisas Médicas (IoMT -Internet of Medical Things).
+O **Hospital Inteligente** é um sistema de apoio à rotina hospitalar. Em um só lugar, reúne informações de pacientes, equipe, leitos, internações e atendimentos para facilitar o acompanhamento e a organização do cuidado.
 
-A aplicação tem como objetivo centralizar informações clínicas provenientes de dispositivos médicos conectados, permitindo que profissionais de saúde acompanhem continuamente os sinais vitais dos pacientes, visualizem alertas clínicos e tenham acesso ao histórico das medições em uma única interface.
-
-O projeto foi desenvolvido com foco em simular um ambiente hospitalar moderno, onde sensores e equipamentos médicos transmitem dados continuamente para uma plataforma capaz de auxiliar na tomada de decisões durante o atendimento.
-
----
+Cada profissional acessa um painel adequado ao seu trabalho. A recepção organiza cadastros e agendamentos; médicos acompanham atendimentos, registros clínicos, prescrições e exames; a enfermagem consulta pacientes internados, acompanha informações clínicas e registra atividades de cuidado; a administração gerencia a equipe.
 
 ## Objetivo
 
-Desenvolver uma plataforma web capaz de integrar dispositivos médicos conectados, coletar e armazenar sinais vitais em tempo real, apresentar informações clínicas de forma centralizada e emitir alertas automáticos sempre que forem identificadas alterações nos parâmetros monitorados.
+Centralizar informações clínicas e operacionais em uma aplicação com acesso autenticado por perfil, oferecendo uma base para acompanhar pacientes internados e apoiar as rotinas de recepção, medicina, enfermagem e administração.
 
----
 
-## Funcionalidades
+## O que o sistema oferece
 
-* Cadastro e gerenciamento de pacientes;
-* Cadastro de profissionais de saúde;
-* Gerenciamento de leitos e setores hospitalares;
-* Cadastro e monitoramento de dispositivos médicos;
-* Controle de internações;
-* Monitoramento em tempo real dos sinais vitais;
-* Visualização do histórico de medições;
-* Dashboard clínico para acompanhamento dos pacientes;
-* Sistema de alertas baseado em limites clínicos;
-* Associação entre pacientes, leitos e dispositivos;
-* Visualização detalhada das informações de cada paciente;
-* Registro do estado operacional dos dispositivos.
+- Cadastro e consulta de pacientes e profissionais;
+- Organização de leitos, internações e atendimentos;
+- Agendamento e consulta de compromissos médicos;
+- Acompanhamento de prescrições e administrações de medicamentos;
+- Registro e consulta de exames laboratoriais e de imagem;
+- Acompanhamento de sinais vitais e alertas dos pacientes;
+- Painéis organizados para as rotinas de recepção, medicina, enfermagem e administração.
 
----
+## Acompanhamento dos pacientes
 
-## Sinais Vitais Monitorados
-
-A plataforma realiza o acompanhamento dos seguintes parâmetros clínicos:
-
-* Frequência cardíaca (BPM);
-* Saturação periférica de oxigênio (SpO₂);
-* Frequência respiratória;
-* Temperatura corporal;
-* Eletrocardiograma (ECG).
-
-Cada monitoramento apresenta:
-
-* Valor atual;
-* Limites clínicos configurados;
-* Tendência de evolução;
-* Horário da última atualização;
-* Histórico completo das medições.
-
----
-
-## Dashboard Médico
-
-O sistema disponibiliza um painel centralizado para acompanhamento dos pacientes internados, contendo:
-
-* Identificação do paciente;
-* Número do leito;
-* Setor hospitalar;
-* Estado clínico estimado;
-* Principais sinais vitais;
-* Alertas ativos.
-
-Também é possível realizar filtros por:
-
-* Setor;
-* Leito;
-* Criticidade;
-* Situação clínica do paciente.
-
----
+As informações do paciente ajudam a equipe a consultar seu atendimento e situação hospitalar, incluindo leito e internação quando aplicável. Para pacientes internados, o painel pode apresentar medições de sinais vitais recebidas de dispositivos conectados ou simulados, como frequência cardíaca, saturação de oxigênio e temperatura, além de alertas associados.
 
 ## Sistema de Alertas
 
@@ -108,9 +61,11 @@ Os níveis de criticidade são classificados em:
 * Moderado;
 * Crítico.
 
----
+## Acesso por função
 
-## Segurança
+O acesso é destinado aos funcionários do hospital e organizado conforme suas responsabilidades. Recepcionistas, médicos, profissionais de enfermagem e administradores têm acesso às funções necessárias ao seu trabalho. Por exemplo, a gestão da equipe é restrita à administração, enquanto prescrições são realizadas por profissionais médicos autorizados. Assim, cada perfil vê e utiliza as áreas correspondentes às suas atribuições.
+
+## Privacidade e uso dos dados
 
 Considerando a natureza sensível dos dados clínicos, o sistema prevê mecanismos de segurança como:
 
@@ -120,59 +75,38 @@ Considerando a natureza sensível dos dados clínicos, o sistema prevê mecanism
 * Proteção das comunicações;
 * Restrição de acesso conforme a função do profissional.
 
-Todos os dados utilizados durante o desenvolvimento são fictícios ou simulados.
+O sistema conta com autenticação de usuários e controle de acesso por perfil para proteger as informações e limitar as ações disponíveis às responsabilidades de cada profissional. Durante o desenvolvimento e as demonstrações, devem ser utilizados dados fictícios ou simulados.
 
----
+## Sinais Vitais Monitorados
 
-## Tecnologias
+A plataforma realiza o acompanhamento dos seguintes parâmetros clínicos:
 
-As tecnologias utilizadas no projeto incluem:
+* Frequência cardíaca (BPM);
+* Saturação periférica de oxigênio (SpO₂);
+* Frequência respiratória;
+* Temperatura corporal;
+* Eletrocardiograma (ECG).
 
-* HTML5
-* CSS3
-* JavaScript
-* Banco de Dados SQL
-* Arquitetura multicamadas
+## Estrutura do projeto
 
-> *A lista será atualizada conforme novas tecnologias forem incorporadas ao projeto.*
-
----
-
-## Estrutura do Projeto
-
-```
+```text
 Hospital-Inteligente/
-│
-├── frontend/
 ├── backend/
-├── database/
-├── docs/
-├── assets/
+│   ├── hospital-api/   # API Spring Boot
+│   └── README.md       # Configuração e endpoints da API
+├── docs/               # Documentos, diagramas e materiais do projeto
+├── frontend/           # Aplicação React
+│   └── README.md       # Execução e detalhes da interface
+├── docker-compose.yml  # PostgreSQL para desenvolvimento local
 └── README.md
 ```
 
----
+## Tecnologias
 
-## Funcionalidades Futuras
-
-Entre as funcionalidades previstas para versões futuras estão:
-
-* Simulador de dispositivos médicos em tempo real;
-* Animação do traçado de ECG;
-* Mapa interativo dos leitos hospitalares;
-* Notificações para profissionais responsáveis;
-* Geração de relatórios em PDF;
-* Histórico avançado de ocorrências;
-* Indicadores de estabilidade clínica;
-* Detecção automática de anomalias nos sinais vitais.
-
----
-
-## Status do Projeto
-
-O projeto encontra-se em desenvolvimento e novas funcionalidades serão implementadas ao longo das próximas etapas.
-
----
+- **Frontend:** React, TypeScript, Vite e Tailwind CSS v4;
+- **Backend:** Java 21, Spring Boot e Maven;
+- **Banco de dados:** PostgreSQL com migrations Flyway;
+- **Ambiente local:** Docker.
 
 ## Time de Desenvolvimento
 

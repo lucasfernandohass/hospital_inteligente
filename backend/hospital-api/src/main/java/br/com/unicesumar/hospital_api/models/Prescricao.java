@@ -1,5 +1,6 @@
 package br.com.unicesumar.hospital_api.models;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -39,6 +40,7 @@ public class Prescricao {
     private Long atendimentoId;
 
     @OneToMany(mappedBy = "prescricao", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @JsonIgnore
     @Builder.Default
     private List<ItemPrescricao> itens = new ArrayList<>();
 }
