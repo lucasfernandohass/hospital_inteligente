@@ -5,6 +5,7 @@ import type { Theme } from "./components/ThemeToggle"
 import AdminDashboard from "./components/AdminDashboard"
 import { roleForScreen, screenForRole, type AuthSession } from "./services/api"
 import { pathForPanel, type PanelSection } from "./hooks/usePanelRoute"
+import { logActivity } from "./components/activityStore"
 
 export type Screen = "login" | "administrador" | "doutor" | "enfermeira" | "recepcionista"
 const SESSION_KEY = "inteliHosp-session"
@@ -193,6 +194,7 @@ export default function App() {
 
   const handleLogin = (authenticated: AuthSession) => {
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(authenticated))
+    logActivity(authenticated.role, "Sessão iniciada", "Acesso ao sistema", "Autenticação realizada")
     window.history.pushState({}, "", pathForScreen(screenForRole(authenticated.role)))
     setSession(authenticated)
     setScreen(screenForRole(authenticated.role))
@@ -221,6 +223,7 @@ export default function App() {
               onNavigate={navigate}
               token={session?.token ?? ""}
               userName={session?.nome ?? ""}
+              userId={session?.id ?? 0}
               theme={theme}
               onToggleTheme={toggleTheme}
             />

@@ -10,18 +10,15 @@ import ActivityLog from "./ActivityLog"
 import AlertNotifications from "./AlertNotifications"
 import type { MonitoringAlert } from "./VitalMonitoring"
 import { logActivity } from "./activityStore"
-import { CLINICAL_ALERT_ACK_STORAGE_KEY, clinicalAlertRecords, readLegacyClinicalAlertAcknowledgements } from "./clinicalAlertStore"
-import { CLINICAL_EVOLUTION_STORAGE_KEY, mergeClinicalEvolutions, readLegacyClinicalEvolutions, type ClinicalEvolutionMap } from "./clinicalEvolutionStore"
-import { PRESCRIPTION_STORAGE_KEY, type SharedPrescription } from "./prescriptionStore"
-import { MEDICATION_ADMINISTRATION_STORAGE_KEY } from "./medicationAdministrationStore"
-import { EXAM_STORAGE_KEY, type ExamType, type SharedExamRequest } from "./examStore"
-import { APPOINTMENT_STORAGE_KEY, DOCTOR_DEMO_ID, formatLongLocalDate, includeDoctorDemoAppointments, initialReceptionAppointments, localDateInputValue, type ReceptionAppointment } from "./appointmentStore"
-import { HOSPITALIZATION_STORAGE_KEY, type Hospitalization } from "./hospitalizationStore"
-import useLocalStorageState from "./useLocalStorageState"
-import { BED_STORAGE_KEY, initialRegisteredBeds, initialRegisteredPatients, normalizeRegisteredBeds, PATIENT_STORAGE_KEY, type RegisteredBed, type RegisteredPatient } from "./patientStore"
+import type { ClinicalEvolutionMap } from "./clinicalEvolutionStore"
+import type { SharedPrescription } from "./prescriptionStore"
+import type { ExamType, SharedExamRequest } from "./examStore"
+import { formatLongLocalDate, localDateInputValue, type ReceptionAppointment } from "./appointmentStore"
+import type { Hospitalization } from "./hospitalizationStore"
+import type { RegisteredBed, RegisteredPatient } from "./patientStore"
 import { usePanelRoute } from "../hooks/usePanelRoute"
-import { api, ApiError } from "../services/api"
-import { mapBed, mapInternment, mapPatient } from "../services/mappers"
+import { api, ApiError, type DoctorDto } from "../services/api"
+import { mapBed, mapClinicalEvolutions, mapInternment, mapPatient } from "../services/mappers"
 import { mapPrescriptions } from "../services/mappers"
 import { useVitalFeed } from "../hooks/useVitalFeed"
 
@@ -29,6 +26,7 @@ interface Props {
   onNavigate: (screen: Screen) => void
   token: string
   userName: string
+  userId: number
   theme: Theme
   onToggleTheme: () => void
 }
@@ -36,352 +34,18 @@ interface Props {
 type Tab = "overview" | "atendimento" | "monitoramento" | "prescricao" | "exames" | "agenda" | "internacao" | "atividades" | "alertas"
 
 
-const pacientesBase = [
-  {
-    id: "PAC-001",
-    nome: "João da Silva",
-    cpf: "123.456.789-00",
-    dataNasc: "15/03/1979",
-    idade: 47,
-    sexo: "M",
-    telefone: "(11) 98765-4321",
-    leito: "12A",
-    setor: "Cardiologia",
-    condicao: "Hipertensão",
-    status: "estável",
-    avatar: "JS",
-    ultimo: "Hoje, 09:20",
-    risco: "low",
-    convenio: "Amil Gold",
-    tipoSanguineo: "O+",
-  },
-  {
-    id: "PAC-002",
-    nome: "Maria Fernanda",
-    cpf: "987.654.321-11",
-    dataNasc: "02/07/1964",
-    idade: 62,
-    sexo: "F",
-    telefone: "(11) 91234-5678",
-    leito: "08B",
-    setor: "Endocrinologia",
-    condicao: "Diabetes Tipo 2",
-    status: "atenção",
-    avatar: "MF",
-    ultimo: "Hoje, 10:45",
-    risco: "medium",
-    convenio: "Unimed",
-    tipoSanguineo: "A+",
-  },
-  {
-    id: "PAC-003",
-    nome: "Carlos Alberto",
-    cpf: "456.123.789-22",
-    dataNasc: "20/11/1991",
-    idade: 35,
-    sexo: "M",
-    telefone: "(11) 92345-6789",
-    leito: "14B",
-    setor: "Pneumologia",
-    condicao: "Pneumonia",
-    status: "crítico",
-    avatar: "CA",
-    ultimo: "Agora",
-    risco: "high",
-    convenio: "Unimed",
-    tipoSanguineo: "B-",
-  },
-  {
-    id: "PAC-004",
-    nome: "Ana Beatriz",
-    cpf: "321.789.456-33",
-    dataNasc: "08/06/1997",
-    idade: 29,
-    sexo: "F",
-    telefone: "(11) 93456-7890",
-    leito: "05A",
-    setor: "Clínica Médica",
-    condicao: "Enxaqueca",
-    status: "estável",
-    avatar: "AB",
-    ultimo: "Ontem",
-    risco: "low",
-    convenio: "SulAmérica",
-    tipoSanguineo: "AB+",
-  },
-  {
-    id: "PAC-005",
-    nome: "Roberto Lima",
-    cpf: "741.852.963-44",
-    dataNasc: "14/09/1972",
-    idade: 54,
-    sexo: "M",
-    telefone: "(11) 94567-8901",
-    leito: "22A",
-    setor: "Cardiologia",
-    condicao: "Insuf. Cardíaca",
-    status: "atenção",
-    avatar: "RL",
-    ultimo: "Hoje, 07:30",
-    risco: "medium",
-    convenio: "Amil Gold",
-    tipoSanguineo: "O-",
-  },
-]
-
-const registrosClinicos: Record<string, {
-  data: string
-  descricao: string
-  pressao: string
-  fc: number
-  temp: number
-  spo2: number
-}[]> = {
-  "PAC-001": [
-    {
-      data: "15 Set 2026",
-      descricao:
-        "Paciente refere cefaleia leve. PA controlada. Mantida medicação atual.",
-      pressao: "128/82",
-      fc: 74,
-      temp: 36.8,
-      spo2: 98,
-    },
-    {
-      data: "10 Set 2026",
-      descricao:
-        "Revisão cardiovascular. ECG sem alterações. Colesterol em queda.",
-      pressao: "132/85",
-      fc: 76,
-      temp: 36.9,
-      spo2: 97,
-    },
-  ],
-  "PAC-002": [
-    {
-      data: "15 Set 2026",
-      descricao:
-        "Glicemia de jejum 280 mg/dL. Ajuste de insulina. Encaminhada para nutricionista.",
-      pressao: "142/90",
-      fc: 82,
-      temp: 37.0,
-      spo2: 96,
-    },
-  ],
-  "PAC-003": [
-    {
-      data: "14 Set 2026",
-      descricao:
-        "Internação por pneumonia severa. SpO₂ 88%. Iniciada antibioticoterapia IV.",
-      pressao: "110/70",
-      fc: 108,
-      temp: 38.9,
-      spo2: 88,
-    },
-  ],
-  "PAC-004": [
-    {
-      data: "14 Set 2026",
-      descricao:
-        "Enxaqueca com aura. Sem déficit neurológico. Prescrito Sumatriptano.",
-      pressao: "118/75",
-      fc: 68,
-      temp: 36.5,
-      spo2: 99,
-    },
-  ],
-  "PAC-005": [
-    {
-      data: "12 Set 2026",
-      descricao:
-        "Edema MMII +++. Crepitação bilateral. Internado para ajuste diurético.",
-      pressao: "165/105",
-      fc: 96,
-      temp: 37.2,
-      spo2: 93,
-    },
-  ],
-}
-
-const prescricoes = [
-  {
-    id: "RX-2026-0091",
-    pacienteId: "PAC-001",
-    data: "15 Set 2026",
-    medico: "Dr. Rafael Oliveira",
-    itens: [
-      {
-        id: "IP-001",
-        medicamento: "Losartana",
-        dosagem: "50mg",
-        via: "Oral",
-        frequencia: "1x ao dia",
-        duracao: "30 dias",
-        quantidade: 30,
-      },
-      {
-        id: "IP-002",
-        medicamento: "Amlodipina",
-        dosagem: "5mg",
-        via: "Oral",
-        frequencia: "1x ao dia",
-        duracao: "30 dias",
-        quantidade: 30,
-      },
-    ],
-  },
-  {
-    id: "RX-2026-0092",
-    pacienteId: "PAC-002",
-    data: "15 Set 2026",
-    medico: "Dr. Pedro Campos",
-    itens: [
-      {
-        id: "IP-003",
-        medicamento: "Insulina NPH",
-        dosagem: "20UI",
-        via: "SC",
-        frequencia: "2x ao dia",
-        duracao: "30 dias",
-        quantidade: 2,
-      },
-      {
-        id: "IP-004",
-        medicamento: "Metformina",
-        dosagem: "850mg",
-        via: "Oral",
-        frequencia: "2x ao dia",
-        duracao: "30 dias",
-        quantidade: 60,
-      },
-    ],
-  },
-  {
-    id: "RX-2026-0093",
-    pacienteId: "PAC-003",
-    data: "14 Set 2026",
-    medico: "Dra. Fernanda Lima",
-    itens: [
-      {
-        id: "IP-005",
-        medicamento: "Amoxicilina",
-        dosagem: "500mg",
-        via: "IV",
-        frequencia: "8/8h",
-        duracao: "7 dias",
-        quantidade: 21,
-      },
-      {
-        id: "IP-006",
-        medicamento: "Dexametasona",
-        dosagem: "4mg",
-        via: "IV",
-        frequencia: "12/12h",
-        duracao: "3 dias",
-        quantidade: 6,
-      },
-    ],
-  },
-]
-
-const exames = [
-  {
-    id: "EX-001",
-    tipo: "ExameLaboratorial",
-    nome: "Hemograma Completo",
-    pacienteId: "PAC-001",
-    data: "10 Set 2026",
-    status: "resultado",
-    resultado:
-      "Hemoglobina 13.8 g/dL, Leucócitos 7.200/mm³, Plaquetas 220.000/mm³. Normal.",
-    solicitante: "Dr. Pedro Campos",
-  },
-  {
-    id: "EX-002",
-    tipo: "ECG",
-    nome: "Eletrocardiograma 12 derivações",
-    pacienteId: "PAC-001",
-    data: "05 Set 2026",
-    status: "resultado",
-    resultado:
-      "Ritmo sinusal. FC 72 bpm. PR 160ms. QRS 90ms. Sem alterações isquêmicas.",
-    solicitante: "Dr. Rafael Oliveira",
-  },
-  {
-    id: "EX-003",
-    tipo: "ExameImagem",
-    nome: "Raio-X de Tórax PA",
-    pacienteId: "PAC-003",
-    data: "14 Set 2026",
-    status: "resultado",
-    resultado:
-      "Opacidade no lobo inferior direito compatível com consolidação pneumônica.",
-    solicitante: "Dra. Fernanda Lima",
-  },
-  {
-    id: "EX-004",
-    tipo: "ExameLaboratorial",
-    nome: "Glicemia de Jejum",
-    pacienteId: "PAC-002",
-    data: "15 Set 2026",
-    status: "resultado",
-    resultado:
-      "Glicemia: 280 mg/dL. Valor de referência: 70–99 mg/dL. AUMENTADO.",
-    solicitante: "Dr. Rafael Oliveira",
-  },
-  {
-    id: "EX-005",
-    tipo: "ExameImagem",
-    nome: "Ecocardiograma",
-    pacienteId: "PAC-005",
-    data: "20 Out 2026",
-    status: "agendado",
-    resultado: null,
-    solicitante: "Dr. Rafael Oliveira",
-  },
-  {
-    id: "EX-006",
-    tipo: "ECG",
-    nome: "Holter 24h",
-    pacienteId: "PAC-005",
-    data: "18 Set 2026",
-    status: "agendado",
-    resultado: null,
-    solicitante: "Dr. Rafael Oliveira",
-  },
-]
-
-const internacoes = [
-  {
-    id: "INT-2024-018",
-    pacienteId: "PAC-005",
-    leito: "22A",
-    ala: "Clínica Geral",
-    motivo: "Insuf. Cardíaca Descompensada",
-    entrada: "12 Set 2026",
-    altaPrevista: "20 Set 2026",
-  },
-  {
-    id: "INT-2024-021",
-    pacienteId: "PAC-003",
-    leito: "14B",
-    ala: "Pneumologia",
-    motivo: "Pneumonia Bacteriana Severa",
-    entrada: "14 Set 2026",
-    altaPrevista: "22 Set 2026",
-  },
-]
-
 const riskColor = {
   low: { bg: "var(--success-surface)", text: "var(--success-foreground)", dot: "var(--success)", label: "Estável" },
   medium: { bg: "var(--warning-surface)", text: "var(--warning-foreground)", dot: "var(--warning)", label: "Atenção" },
   high: { bg: "var(--danger-surface)", text: "var(--danger-foreground)", dot: "var(--danger)", label: "Crítico" },
+  unknown: { bg: "var(--secondary)", text: "var(--muted-foreground)", dot: "var(--muted-foreground)", label: "Sem leitura" },
 }
 
 export default function DoctorDashboard({
   onNavigate,
   token,
   userName,
+  userId,
   theme,
   onToggleTheme,
 }: Props) {
@@ -389,86 +53,73 @@ export default function DoctorDashboard({
   const [registeredBeds, setRegisteredBeds] = useState<RegisteredBed[]>([])
   const [hospitalizations, setHospitalizations] = useState<Hospitalization[]>([])
   const [receptionAppointments, setReceptionAppointments] = useState<ReceptionAppointment[]>([])
+  const [doctorProfile, setDoctorProfile] = useState<DoctorDto | null>(null)
   const [apiPrescriptions, setApiPrescriptions] = useState<SharedPrescription[]>([])
+  const [medications, setMedications] = useState<Awaited<ReturnType<typeof api.listMedications>>>([])
+  const [administratedMedicationItems, setAdministratedMedicationItems] = useState<string[]>([])
+  const [evolucoesClinicas, setEvolucoesClinicas] = useState<ClinicalEvolutionMap>({})
+  const [apiAlerts, setApiAlerts] = useState<Awaited<ReturnType<typeof api.listAlerts>>>([])
   const [dataLoading, setDataLoading] = useState(true)
   const [dataError, setDataError] = useState("")
   useEffect(() => {
     let active = true
     setDataLoading(true)
-    Promise.all([api.listPatients(token), api.listBeds(token), api.listInternments(token), api.listAppointments(token), api.listDoctors(token), api.listPrescriptions(token), api.listPrescriptionItems(token), api.listMedications(token)])
-      .then(([patientsDto, bedsDto, internmentsDto, appointmentsDto, doctors, prescriptions, items, medications]) => {
+    Promise.all([api.listPatients(token), api.listBeds(token), api.listInternments(token), api.listAppointments(token), api.listDoctors(token), api.listPrescriptions(token), api.listPrescriptionItems(token), api.listMedications(token), api.listAttendances(token), api.listClinicalRecords(token), api.listAlerts(token), api.listMedicationAdministrations(token), api.listImageExams(token), api.listLabExams(token), api.listECGs(token)])
+      .then(([patientsDto, bedsDto, internmentsDto, appointmentsDto, doctors, prescriptions, items, medicationsDto, attendances, clinicalRecords, alerts, administrations, imageExams, labExams, ecgs]) => {
         if (!active) return
         const patients = patientsDto.map(mapPatient)
         setRegisteredPatients(patients)
+        const currentDoctor = doctors.find((doctor) => doctor.id === userId) ?? null
+        setDoctorProfile(currentDoctor)
         setRegisteredBeds(bedsDto.map((bed) => mapBed(bed, internmentsDto)))
         setHospitalizations(internmentsDto.map((item) => mapInternment(item, bedsDto, doctors)))
         setReceptionAppointments(appointmentsDto.map((item) => ({
           id: String(item.id), medicoId: String(item.medicoId), data: item.data, hora: item.horario.slice(0, 5),
           paciente: patients.find((patient) => patient.id === String(item.pacienteId))?.nome ?? `Paciente ${item.pacienteId}`,
-          pacienteId: String(item.pacienteId), status: item.status.toLowerCase().includes("conclu") ? "Concluída" : "Agendada",
+          pacienteId: String(item.pacienteId), status: item.status.toLowerCase().includes("conclu") ? "Concluída" : item.status.toLowerCase().includes("atendimento") ? "Em atendimento" : "Agendada",
         })))
-        setApiPrescriptions(mapPrescriptions(prescriptions, items, medications, doctors))
-        setDataError("")
+        setApiPrescriptions(mapPrescriptions(prescriptions, items, medicationsDto, doctors))
+        setMedications(medicationsDto)
+        setAdministratedMedicationItems(administrations.map((item) => String(item.itemPrescricaoId)))
+        const attendanceById = new Map(attendances.map((item) => [item.id, item]))
+        setEvolucoesClinicas(mapClinicalEvolutions(attendances, clinicalRecords, doctors, { id: userId, nome: userName }))
+        setApiAlerts(alerts)
+        const statusOf = (value: string): SharedExamRequest["status"] => /result|conclu/i.test(value) ? "resultado" : /andamento/i.test(value) ? "em andamento" : "agendado"
+        setExames([
+          ...labExams.filter((exam) => exam.pacienteId !== null && exam.medicoId === userId).map((exam) => ({ id: String(exam.id), tipo: "ExameLaboratorial" as const, nome: exam.tipoAnalise, pacienteId: String(exam.pacienteId), data: exam.dataSolicitacao.slice(0, 10).split("-").reverse().join("/"), status: statusOf(exam.status), resultado: exam.observacoes, solicitante: currentDoctor?.nome ?? userName, medicoId: String(exam.medicoId), atendimentoId: String(exam.atendimentoId), amostra: exam.amostra, metodo: exam.metodo })),
+          ...imageExams.filter((exam) => exam.pacienteId !== null && exam.medicoId === userId).map((exam) => ({ id: String(exam.id), tipo: "ExameImagem" as const, nome: `${exam.modalidade} · ${exam.regiaoCorpo}`, pacienteId: String(exam.pacienteId), data: exam.dataSolicitacao.slice(0, 10).split("-").reverse().join("/"), status: statusOf(exam.status), resultado: exam.observacoes, solicitante: currentDoctor?.nome ?? userName, medicoId: String(exam.medicoId), atendimentoId: String(exam.atendimentoId), modalidade: exam.modalidade, regiaoCorpo: exam.regiaoCorpo })),
+          ...ecgs.filter((exam) => attendanceById.get(exam.atendimentoId)?.medicoResponsavelId === userId).map((exam) => ({ id: String(exam.id), tipo: "ECG" as const, nome: "Eletrocardiograma", pacienteId: String(exam.pacienteId), data: exam.dataHora.slice(0, 10).split("-").reverse().join("/"), status: "resultado" as const, resultado: exam.observacao ?? `${exam.ritmo} · FC ${exam.frequenciaCardiaca} bpm`, solicitante: currentDoctor?.nome ?? userName, medicoId: String(userId), atendimentoId: String(exam.atendimentoId) })),
+        ])
+        setDataError(currentDoctor ? "" : "A conta autenticada não foi encontrada entre os médicos cadastrados na API.")
       })
       .catch((error) => { if (active) setDataError(error instanceof ApiError ? error.message : "Não foi possível carregar dados da API.") })
       .finally(() => { if (active) setDataLoading(false) })
     return () => { active = false }
-  }, [token])
-  const pacientes = useMemo(() => {
-    const knownIds = new Set(pacientesBase.map((patient) => patient.id))
-    const synchronizedBase = pacientesBase.filter((patient) => registeredPatients.some((item) => item.id === patient.id)).map((patient) => {
-      const registered = registeredPatients.find((item) => item.id === patient.id)
-      const occupiedBed = registeredBeds.find((bed) => bed.status === "Ocupado" && bed.pacienteId === patient.id)
-      const admission = hospitalizations.find((item) => item.pacienteId === patient.id && item.status === "Ativa")
-      return {
-        ...patient,
-        nome: registered?.nome ?? patient.nome,
-        cpf: registered?.cpf ?? patient.cpf,
-        dataNasc: registered?.dataNasc ?? patient.dataNasc,
-        sexo: registered?.sexo ?? patient.sexo,
-        telefone: registered?.telefone ?? patient.telefone,
-        convenio: registered?.convenio ?? patient.convenio,
-        leito: occupiedBed?.numero ?? "—",
-        setor: occupiedBed?.setor ?? occupiedBed?.tipo ?? patient.setor,
-        condicao: admission?.motivo ?? patient.condicao,
-      }
-    })
-    const additions = registeredPatients
-      .filter((patient) => !knownIds.has(patient.id))
-      .map((patient) => {
-        const parts = patient.dataNasc.split("/").map(Number)
-        const birthDate = new Date(parts[2] ?? 2000, (parts[1] ?? 1) - 1, parts[0] ?? 1)
-        const today = new Date()
-        const idade = Math.max(0, today.getFullYear() - birthDate.getFullYear() - (today < new Date(today.getFullYear(), birthDate.getMonth(), birthDate.getDate()) ? 1 : 0))
-        const occupiedBed = registeredBeds.find((bed) => bed.status === "Ocupado" && bed.pacienteId === patient.id)
-        const admission = hospitalizations.find((item) => item.pacienteId === patient.id && item.status === "Ativa")
-        return {
-          id: patient.id,
-          nome: patient.nome,
-          cpf: patient.cpf,
-          dataNasc: patient.dataNasc,
-          idade,
-          sexo: patient.sexo,
-          telefone: patient.telefone,
-          leito: occupiedBed?.numero ?? "—",
-          setor: occupiedBed?.setor ?? occupiedBed?.tipo ?? "Sem internação",
-          condicao: admission?.motivo ?? "Aguardando avaliação",
-          status: "estável",
-          avatar: patient.nome.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase(),
-          ultimo: "Cadastro recente",
-          risco: "low",
-          convenio: patient.convenio,
-          tipoSanguineo: "Não informado",
-        }
-      })
-    return [...synchronizedBase, ...additions]
-  }, [hospitalizations, registeredBeds, registeredPatients])
-  const monitorPatients = useMemo(() => pacientes.filter((patient) => registeredBeds.some((bed) => bed.status === "Ocupado" && bed.pacienteId === patient.id)).map((patient) => {
+  }, [token, userId])
+  const pacientes = useMemo(() => registeredPatients.map((patient) => {
+    const occupiedBed = registeredBeds.find((bed) => bed.status === "Ocupado" && bed.pacienteId === patient.id)
+    const admission = hospitalizations.find((item) => item.pacienteId === patient.id && item.status === "Ativa")
+    const [day, month, year] = patient.dataNasc.split("/").map(Number)
+    const birthDate = new Date(year, month - 1, day)
+    const today = new Date()
+    const idade = Math.max(0, today.getFullYear() - birthDate.getFullYear() - (today < new Date(today.getFullYear(), birthDate.getMonth(), birthDate.getDate()) ? 1 : 0))
+    const lastAppointment = receptionAppointments.filter((item) => item.pacienteId === patient.id).sort((a, b) => `${b.data}T${b.hora}`.localeCompare(`${a.data}T${a.hora}`))[0]
+    return {
+      id: patient.id, nome: patient.nome, cpf: patient.cpf, dataNasc: patient.dataNasc, idade, sexo: patient.sexo,
+      telefone: patient.telefone, convenio: patient.convenio, leito: occupiedBed?.numero ?? "—",
+      setor: occupiedBed?.setor ?? occupiedBed?.tipo ?? doctorProfile?.especialidade ?? "—",
+      condicao: admission?.motivo ?? (lastAppointment ? "Consulta agendada" : "Sem atendimento associado"),
+      status: "sem avaliação", avatar: patient.nome.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase(),
+      ultimo: lastAppointment ? `${new Date(`${lastAppointment.data}T${lastAppointment.hora}:00`).toLocaleDateString("pt-BR")} · ${lastAppointment.hora}` : "—",
+      risco: "unknown", tipoSanguineo: "—",
+    }
+  }), [doctorProfile, hospitalizations, receptionAppointments, registeredBeds, registeredPatients])
+  const doctorActiveHospitalizations = useMemo(() => hospitalizations.filter((admission) => admission.status === "Ativa" && admission.medicoId === String(userId)), [hospitalizations, userId])
+  const monitorPatients = useMemo(() => pacientes.filter((patient) => doctorActiveHospitalizations.some((admission) => admission.pacienteId === patient.id)).map((patient) => {
     const bed = registeredBeds.find((item) => item.status === "Ocupado" && item.pacienteId === patient.id)
     return { id: patient.id, name: patient.nome, bed: bed?.numero ?? patient.leito, sector: bed?.setor ?? bed?.tipo ?? patient.setor, condition: patient.condicao }
-  }), [pacientes, registeredBeds])
+  }), [doctorActiveHospitalizations, pacientes, registeredBeds])
   const { readings: liveVitals } = useVitalFeed(monitorPatients.map((patient) => patient.id), token)
-  const vitalsData = Object.entries(liveVitals).flatMap(([patientId, reading]) => reading.systolic === undefined ? [] : [{ label: pacientes.find((patient) => patient.id === patientId)?.nome ?? patientId, bp: reading.systolic }])
   const [activeTab, setActiveTab] = usePanelRoute("medico", ["overview", "atendimento", "monitoramento", "prescricao", "exames", "agenda", "internacao", "atividades", "alertas"] as const, "overview")
   const [selectedPaciente, setSelectedPaciente] =
     useState<typeof pacientes[0] | null>(null)
@@ -478,16 +129,14 @@ export default function DoctorDashboard({
   const [expandedPrescricao, setExpandedPrescricao] = useState<string | null>(
     null,
   )
-  const [prescricoesLocais, setPrescricoesLocais] = useLocalStorageState<SharedPrescription[]>(PRESCRIPTION_STORAGE_KEY, [])
-  const [medicacoesAdministradas] = useLocalStorageState<string[]>(MEDICATION_ADMINISTRATION_STORAGE_KEY, [])
-  const [evolucoesClinicas, setEvolucoesClinicas] = useLocalStorageState<ClinicalEvolutionMap>(CLINICAL_EVOLUTION_STORAGE_KEY, () => readLegacyClinicalEvolutions(registrosClinicos))
-  useEffect(() => setEvolucoesClinicas((current) => mergeClinicalEvolutions(current, registrosClinicos)), [setEvolucoesClinicas])
+  const medicacoesAdministradas = administratedMedicationItems
+  const [clinicalActionError, setClinicalActionError] = useState("")
   const [showEvolutionForm, setShowEvolutionForm] = useState(false)
   const [evolutionDraft, setEvolutionDraft] = useState("")
   const [showPrescriptionForm, setShowPrescriptionForm] = useState(false)
-  const [examesLocais, setExamesLocais] = useLocalStorageState<SharedExamRequest[]>(EXAM_STORAGE_KEY, [])
+  const [examesLocais, setExames] = useState<SharedExamRequest[]>([])
   const [showExamForm, setShowExamForm] = useState(false)
-  const [examForm, setExamForm] = useState({ pacienteId: pacientes[0]?.id ?? "", nome: "", tipo: "ExameLaboratorial" as ExamType, data: localDateInputValue(), hora: "" })
+  const [examForm, setExamForm] = useState({ pacienteId: "", nome: "", tipo: "ExameLaboratorial" as ExamType, amostra: "", metodo: "", modalidade: "", regiaoCorpo: "" })
   const [resultExamId, setResultExamId] = useState<string | null>(null)
   const [examResultDraft, setExamResultDraft] = useState("")
   const [prescriptionForm, setPrescriptionForm] = useState({
@@ -500,10 +149,8 @@ export default function DoctorDashboard({
     duracao: "7 dias",
     quantidade: "7",
   })
-  const [alertasReconhecidos, setAlertasReconhecidos] = useLocalStorageState<string[]>(CLINICAL_ALERT_ACK_STORAGE_KEY, readLegacyClinicalAlertAcknowledgements)
-  const [monitoringAlerts, setMonitoringAlerts] = useLocalStorageState<MonitoringAlert[]>("inteliHosp-medico-monitoramento-alertas", [])
-  const [monitoringAcknowledged, setMonitoringAcknowledged] = useLocalStorageState<string[]>("inteliHosp-monitoramento-reconhecidos", [])
-  const monitoringPendingCount = monitoringAlerts.filter((alert) => !monitoringAcknowledged.includes(alert.key)).length
+  const [monitoringAlerts, setMonitoringAlerts] = useState<MonitoringAlert[]>([])
+  const [monitoringAcknowledged, setMonitoringAcknowledged] = useState<string[]>([])
   const [patientSearch, setPatientSearch] = useState("")
   const [patientStatusFilter, setPatientStatusFilter] = useState("todos")
   const [patientRiskFilter, setPatientRiskFilter] = useState("todos")
@@ -516,44 +163,33 @@ export default function DoctorDashboard({
   const [examTypeFilter, setExamTypeFilter] = useState<"todos" | ExamType>("todos")
 
   const getPatientRisk = (patient: typeof pacientes[number]) => {
-    const alerts = monitoringAlerts.filter((alert) => alert.patientId === patient.id)
+    const alerts = monitoringAlerts.filter((alert) => alert.patientId === patient.id && (receptionAppointments.some((appointment) => appointment.medicoId === String(userId) && appointment.pacienteId === patient.id) || doctorActiveHospitalizations.some((admission) => admission.pacienteId === patient.id)))
     if (alerts.some((alert) => alert.severity === "Crítico")) return "high"
     if (alerts.some((alert) => alert.severity === "Moderado")) return patient.risco === "high" ? "high" : "medium"
     if (alerts.some((alert) => alert.severity === "Informativo")) return patient.risco === "low" ? "medium" : patient.risco
-    return patient.risco
+    const reading = liveVitals[patient.id]
+    if (!reading || [reading.heartRate, reading.temperature, reading.oxygen, reading.systolic].every((value) => value === undefined)) return "unknown"
+    if ((reading.oxygen !== undefined && reading.oxygen < 90) || (reading.heartRate !== undefined && (reading.heartRate > 120 || reading.heartRate < 45)) || (reading.temperature !== undefined && reading.temperature >= 39) || (reading.systolic !== undefined && reading.systolic >= 180)) return "high"
+    if ((reading.oxygen !== undefined && reading.oxygen < 94) || (reading.heartRate !== undefined && (reading.heartRate > 100 || reading.heartRate < 55)) || (reading.temperature !== undefined && reading.temperature >= 38) || (reading.systolic !== undefined && reading.systolic >= 140)) return "medium"
+    return "low"
   }
   const getPatientStatus = (patient: typeof pacientes[number]) => {
     const risk = getPatientRisk(patient)
     if (risk === "high") return "crítico"
     if (risk === "medium") return "atenção"
-    return patient.status
+    return risk === "unknown" ? "sem avaliação" : patient.status
   }
 
-  const alertas = clinicalAlertRecords.filter((alert) => pacientes.some((patient) => patient.id === alert.pacienteId))
-
-  const alertasPendentes = alertas.filter((a) => !alertasReconhecidos.includes(a.id))
-  const maxBP = Math.max(1, ...vitalsData.map((d) => d.bp))
-  const patientSectors = [...new Set(pacientes.map((patient) => patient.setor))]
-  const patientBeds = [...new Set(pacientes.map((patient) => patient.leito).filter((bed) => bed !== "—"))]
-  const todasPrescricoes = [
-    ...apiPrescriptions.map((prescription) => ({
-      id: prescription.id, pacienteId: prescription.pacienteId, data: prescription.data, medico: prescription.medico,
+  const todasPrescricoes = apiPrescriptions.filter((prescription) => prescription.medicoId === String(userId)).map((prescription) => ({
+      id: prescription.id, pacienteId: prescription.pacienteId, data: prescription.data, medico: prescription.medico, medicoId: prescription.medicoId,
       itens: [{ ...prescription.item, status: "pendente" as const }],
-    })),
-    ...prescricoesLocais.map((prescription) => ({
-      id: prescription.id,
-      pacienteId: prescription.pacienteId,
-      data: prescription.data,
-      medico: prescription.medico,
-      itens: [prescription.item],
-    })),
-  ]
+    }))
   const todosExames = examesLocais
   const selectedLatestVitals = selectedPaciente
-    ? evolucoesClinicas[selectedPaciente.id]?.find((entry) => entry.fc !== undefined || entry.temp !== undefined || entry.spo2 !== undefined || entry.pressao !== undefined) ?? registrosClinicos[selectedPaciente.id]?.[0]
+    ? evolucoesClinicas[selectedPaciente.id]?.find((entry) => entry.fc !== undefined || entry.temp !== undefined || entry.spo2 !== undefined || entry.pressao !== undefined)
     : undefined
   const agendaExibida = receptionAppointments
-      .filter((appointment) => appointment.medicoId === DOCTOR_DEMO_ID)
+      .filter((appointment) => appointment.medicoId === String(userId))
       .sort((a, b) => a.data.localeCompare(b.data) || a.hora.localeCompare(b.hora))
       .map((appointment) => {
         const status = appointment.status ?? "Agendada"
@@ -561,8 +197,8 @@ export default function DoctorDashboard({
         hora: appointment.hora,
         paciente: appointment.paciente,
         pacienteId: appointment.pacienteId ?? pacientes.find((patient) => patient.nome === appointment.paciente)?.id ?? "",
-        tipo: "Consulta agendada",
-        local: "Consultório 12",
+        tipo: "Consulta",
+        local: doctorProfile?.especialidade ?? "Atendimento médico",
         status,
         concluido: status === "Concluída",
         data: appointment.data,
@@ -571,13 +207,7 @@ export default function DoctorDashboard({
       }})
   const consultasHoje = agendaExibida.filter((appointment) => appointment.data === localDateInputValue())
   const consultasPendentesHoje = consultasHoje.filter((appointment) => appointment.status !== "Concluída").length
-  const internacoesExibidas = [
-    ...internacoes
-      .filter((admission) => registeredBeds.some((bed) => bed.status === "Ocupado" && bed.pacienteId === admission.pacienteId && bed.numero === admission.leito))
-      .map((admission) => ({ ...admission, key: admission.id })),
-    ...hospitalizations
-      .filter((admission) => admission.status === "Ativa")
-      .map((admission) => ({
+  const internacoesExibidas = doctorActiveHospitalizations.map((admission) => ({
         id: admission.id,
         pacienteId: admission.pacienteId,
         leito: admission.leito,
@@ -586,15 +216,29 @@ export default function DoctorDashboard({
         entrada: admission.dataEntrada,
         altaPrevista: admission.dataAltaPrevista,
         key: admission.id,
-      })),
-  ]
-  const filteredPatients = useMemo(() => pacientes.filter((patient) =>
+      }))
+  const pacientesDoMedico = pacientes.filter((patient) =>
+    agendaExibida.some((appointment) => appointment.pacienteId === patient.id) ||
+    doctorActiveHospitalizations.some((admission) => admission.pacienteId === patient.id),
+  )
+  const pacientesDoMedicoIds = new Set(pacientesDoMedico.map((patient) => patient.id))
+  const monitoringAlertsDoMedico = monitoringAlerts.filter((alert) => pacientesDoMedicoIds.has(alert.patientId))
+  const monitoringPendingCount = monitoringAlerts.filter((alert) => pacientesDoMedicoIds.has(alert.patientId) && !monitoringAcknowledged.includes(alert.key)).length
+  const alertas = apiAlerts.filter((alert) => pacientesDoMedicoIds.has(String(alert.pacienteId))).map((alert) => {
+    const patient = pacientes.find((item) => item.id === String(alert.pacienteId))
+    const timestamp = new Date(alert.dataHora)
+    return { id: String(alert.id), pacienteId: String(alert.pacienteId), severity: /crit|alto/i.test(alert.nivel) ? "high" as const : "medium" as const, titulo: alert.tipo, detalhe: alert.mensagem, data: timestamp.toLocaleDateString("pt-BR"), horario: timestamp.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }), local: patient ? `Leito ${patient.leito}` : "", valor: alert.mensagem, label: "", ativo: alert.ativo }
+  })
+  const alertasPendentes = alertas.filter((alert) => alert.ativo)
+  const patientSectors = [...new Set(pacientesDoMedico.map((patient) => patient.setor))]
+  const patientBeds = [...new Set(pacientesDoMedico.map((patient) => patient.leito).filter((bed) => bed !== "—"))]
+  const filteredPatients = useMemo(() => pacientesDoMedico.filter((patient) =>
     `${patient.nome} ${patient.id} ${patient.condicao}`.toLowerCase().includes(patientSearch.toLowerCase()) &&
     (patientStatusFilter === "todos" || getPatientStatus(patient) === patientStatusFilter) &&
     (patientRiskFilter === "todos" || getPatientRisk(patient) === patientRiskFilter) &&
     (patientSectorFilter === "todos" || patient.setor === patientSectorFilter) &&
     (patientBedFilter === "todos" || patient.leito === patientBedFilter),
-  ), [pacientes, patientSearch, patientStatusFilter, patientRiskFilter, patientSectorFilter, patientBedFilter, monitoringAlerts])
+  ), [pacientesDoMedico, patientSearch, patientStatusFilter, patientRiskFilter, patientSectorFilter, patientBedFilter, monitoringAlerts])
   useEffect(() => {
     setSelectedPaciente((current) => current && !filteredPatients.some((patient) => patient.id === current.id) ? null : current)
   }, [filteredPatients])
@@ -607,47 +251,50 @@ export default function DoctorDashboard({
     }
   }
 
-  const markAlertRecognized = (id: string) => {
+  const markAlertRecognized = async (id: string) => {
     logActivity("Médico", "Alerta reconhecido", "Alerta", id)
-    setAlertasReconhecidos((current) =>
-      current.includes(id) ? current : [...current, id],
-    )
+    const current = apiAlerts.find((alert) => String(alert.id) === id)
+    if (!current) return
+    try {
+      const updated = await api.updateAlert(current.id, { ...current, ativo: false }, token)
+      setApiAlerts((items) => items.map((alert) => alert.id === updated.id ? updated : alert))
+    } catch (error) { setDataError(error instanceof ApiError ? error.message : "Não foi possível atualizar o alerta.") }
   }
 
-  const markAllAlertsRecognized = () => {
-    if (alertasPendentes.length) logActivity("Médico", "Alertas reconhecidos", "Central de alertas", `${alertasPendentes.length} alertas`)
-    setAlertasReconhecidos((current) => [...new Set([...current, ...alertas.map((alert) => alert.id)])])
+  const markAllAlertsRecognized = async () => {
+    try {
+      const updates = await Promise.all(alertasPendentes.map((alert) => {
+        const current = apiAlerts.find((item) => String(item.id) === alert.id)
+        return current ? api.updateAlert(current.id, { ...current, ativo: false }, token) : null
+      }))
+      const byId = new Map(updates.filter((item): item is NonNullable<typeof item> => item !== null).map((item) => [item.id, item]))
+      setApiAlerts((items) => items.map((item) => byId.get(item.id) ?? item))
+      if (updates.length) logActivity("Médico", "Alertas reconhecidos", "Central de alertas", `${updates.length} alertas`)
+    } catch (error) { setDataError(error instanceof ApiError ? error.message : "Não foi possível atualizar os alertas.") }
   }
 
-  const handleSalvarPrescricao = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSalvarPrescricao = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const paciente = pacientes.find((patient) => patient.id === prescriptionForm.pacienteId)
     const quantidade = Number(prescriptionForm.quantidade)
     if (!paciente || !prescriptionForm.medicamento.trim() || !prescriptionForm.dosagem.trim() || !Number.isFinite(quantidade) || quantidade < 1) return
-    const id = String(Date.now())
-    const prescription: SharedPrescription = {
-      id: "RX-LOCAL-" + id,
-      pacienteId: paciente.id,
-      data: new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).format(new Date()),
-      medico: userName,
-      item: {
-        id: "IP-LOCAL-" + id,
-        medicamento: prescriptionForm.medicamento.trim(),
-        dosagem: prescriptionForm.dosagem.trim(),
-        via: prescriptionForm.via,
-        horario: prescriptionForm.horario,
-        frequencia: prescriptionForm.frequencia.trim(),
-        duracao: prescriptionForm.duracao.trim(),
-        quantidade,
-      },
-    }
-    setPrescricoesLocais((current) => [prescription, ...current])
-    logActivity("Médico", "Prescrição demonstrativa criada", paciente.id, `${prescription.item.medicamento} · ${prescription.item.dosagem}`)
-    setPrescriptionForm({ pacienteId: paciente.id, medicamento: "", dosagem: "", via: "Oral", horario: "08:00", frequencia: "1x ao dia", duracao: "7 dias", quantidade: "7" })
-    setShowPrescriptionForm(false)
+    try {
+      let medication = medications.find((item) => item.nome.toLocaleLowerCase("pt-BR") === prescriptionForm.medicamento.trim().toLocaleLowerCase("pt-BR") && item.dosagem === prescriptionForm.dosagem.trim())
+      if (!medication) medication = await api.createMedication({ nome: prescriptionForm.medicamento.trim(), dosagem: prescriptionForm.dosagem.trim(), ativo: true }, token)
+      const now = new Date()
+      const data = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}T${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`
+      const bed = registeredBeds.find((item) => item.status === "Ocupado" && item.pacienteId === paciente.id)
+      const attendance = await api.createAttendance({ data, tipo: "CONSULTA_MEDICA", descricao: `Prescrição médica para ${paciente.nome}`, status: "CONCLUIDO", leitoId: bed ? Number(bed.id) : null, pacienteId: Number(paciente.id), funcionarioResponsavelId: userId, medicoResponsavelId: userId }, token)
+      const prescription = await api.createPrescription({ data, observacao: null, status: "ATIVA", pacienteId: Number(paciente.id), medicoId: userId, atendimentoId: attendance.id }, token)
+      const item = await api.createPrescriptionItem({ prescricaoId: prescription.id, medicamentoId: medication.id, dose: prescriptionForm.dosagem.trim(), viaAdministracao: prescriptionForm.via, frequencia: prescriptionForm.frequencia.trim(), duracao: prescriptionForm.duracao.trim(), observacoes: `Horário: ${prescriptionForm.horario}; quantidade: ${quantidade}` }, token)
+      setApiPrescriptions((current) => [...mapPrescriptions([prescription], [item], [medication], doctorProfile ? [doctorProfile] : []), ...current])
+      logActivity("Médico", "Prescrição registrada", paciente.id, `${medication.nome} · ${prescriptionForm.dosagem}`)
+      setPrescriptionForm({ pacienteId: paciente.id, medicamento: "", dosagem: "", via: "Oral", horario: "08:00", frequencia: "1x ao dia", duracao: "7 dias", quantidade: "7" })
+      setShowPrescriptionForm(false)
+    } catch (error) { setDataError(error instanceof ApiError ? error.message : "Não foi possível registrar a prescrição na API.") }
   }
 
-  const handleReagendarConsulta = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleReagendarConsulta = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!rescheduleAppointmentId || !rescheduleForm.data || !rescheduleForm.hora) return
     const appointment = receptionAppointments.find((item) => item.id === rescheduleAppointmentId)
@@ -657,88 +304,116 @@ export default function DoctorDashboard({
       setRescheduleError("Este horário já está ocupado na agenda do médico.")
       return
     }
-    setReceptionAppointments((current) => current.map((item) => item.id === rescheduleAppointmentId ? { ...item, ...rescheduleForm } : item))
-    logActivity("Médico", "Consulta demonstrativa reagendada", appointment.pacienteId ?? appointment.paciente, `${rescheduleForm.data} · ${rescheduleForm.hora}`)
-    setRescheduleAppointmentId(null)
-    setRescheduleError("")
+    try {
+      const dto = (await api.listAppointments(token)).find((item) => String(item.id) === rescheduleAppointmentId)
+      if (!dto) throw new Error("Consulta não encontrada na API.")
+      await api.updateAppointment(dto.id, { ...dto, data: rescheduleForm.data, horario: rescheduleForm.hora }, token)
+      setReceptionAppointments((current) => current.map((item) => item.id === rescheduleAppointmentId ? { ...item, ...rescheduleForm } : item))
+      logActivity("Médico", "Consulta reagendada", appointment.pacienteId ?? appointment.paciente, `${rescheduleForm.data} · ${rescheduleForm.hora}`)
+      setRescheduleAppointmentId(null); setRescheduleError("")
+    } catch (error) { setRescheduleError(error instanceof ApiError ? error.message : "Não foi possível salvar o reagendamento.") }
   }
 
-  const handleIniciarConsulta = (appointmentId: string) => {
+  const handleIniciarConsulta = async (appointmentId: string) => {
     const appointment = receptionAppointments.find((item) => item.id === appointmentId)
     if (!appointment || appointment.status === "Concluída") return
-    setReceptionAppointments((current) => current.map((item) => item.id === appointmentId ? { ...item, status: "Em atendimento" } : item))
-    logActivity("Médico", "Atendimento iniciado", appointment.pacienteId ?? appointment.paciente, `${appointment.id} · ${appointment.hora}`)
-    if (appointment.pacienteId) goToPatient(appointment.pacienteId)
+    try {
+      const dto = (await api.listAppointments(token)).find((item) => String(item.id) === appointmentId)
+      if (!dto) throw new Error("Consulta não encontrada na API.")
+      await api.updateAppointment(dto.id, { ...dto, status: "EM_ATENDIMENTO" }, token)
+      setReceptionAppointments((current) => current.map((item) => item.id === appointmentId ? { ...item, status: "Em atendimento" } : item))
+      logActivity("Médico", "Atendimento iniciado", appointment.pacienteId ?? appointment.paciente, `${appointment.id} · ${appointment.hora}`)
+      if (appointment.pacienteId) goToPatient(appointment.pacienteId)
+    } catch (error) { setDataError(error instanceof ApiError ? error.message : "Não foi possível iniciar o atendimento.") }
   }
 
-  const handleConcluirConsulta = (appointmentId: string) => {
+  const handleConcluirConsulta = async (appointmentId: string) => {
     const appointment = receptionAppointments.find((item) => item.id === appointmentId)
     if (!appointment || appointment.status !== "Em atendimento") return
-    setReceptionAppointments((current) => current.map((item) => item.id === appointmentId ? { ...item, status: "Concluída" } : item))
-    logActivity("Médico", "Atendimento concluído", appointment.pacienteId ?? appointment.paciente, `${appointment.id} · ${appointment.hora}`)
+    try {
+      const dto = (await api.listAppointments(token)).find((item) => String(item.id) === appointmentId)
+      if (!dto) throw new Error("Consulta não encontrada na API.")
+      await api.updateAppointment(dto.id, { ...dto, status: "CONCLUIDA" }, token)
+      setReceptionAppointments((current) => current.map((item) => item.id === appointmentId ? { ...item, status: "Concluída" } : item))
+      logActivity("Médico", "Atendimento concluído", appointment.pacienteId ?? appointment.paciente, `${appointment.id} · ${appointment.hora}`)
+    } catch (error) { setDataError(error instanceof ApiError ? error.message : "Não foi possível concluir o atendimento.") }
   }
 
-  const handleDarAlta = (patientId: string, admissionId: string, bedNumber: string) => {
+  const handleDarAlta = async (patientId: string, admissionId: string, bedNumber: string) => {
     const bed = registeredBeds.find((item) => item.status === "Ocupado" && item.pacienteId === patientId && item.numero === bedNumber)
     if (!bed) return
-    const dischargeDate = new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(new Date())
-    setRegisteredBeds((current) => current.map((item) => item.id === bed.id ? { ...item, status: "Higienização", pacienteId: undefined } : item))
-    setHospitalizations((current) => current.map((item) => item.id === admissionId && item.status === "Ativa" ? { ...item, status: "Alta", dataAlta: dischargeDate } : item))
-    logActivity("Médico", "Alta demonstrativa registrada", patientId, `Leito ${bedNumber} · ${dischargeDate}`)
-    setAltaEmConfirmacaoId(null)
+    try {
+      const date = localDateInputValue()
+      const [internment, bedDto] = await Promise.all([api.listInternments(token).then((items) => items.find((item) => String(item.id) === admissionId)), api.getBed(Number(bed.id), token)])
+      if (!internment) throw new Error("Internação não encontrada na API.")
+      await api.updateInternment(internment.id, { ...internment, dataAlta: date, status: "ALTA" }, token)
+      await api.updateBed(bedDto.id, { ...bedDto, status: "HIGIENIZACAO" }, token)
+      setRegisteredBeds((current) => current.map((item) => item.id === bed.id ? { ...item, status: "Higienização", pacienteId: undefined } : item))
+      setHospitalizations((current) => current.map((item) => item.id === admissionId ? { ...item, status: "Alta", dataAlta: date } : item))
+      logActivity("Médico", "Alta registrada", patientId, `Leito ${bedNumber} · ${date}`)
+      setAltaEmConfirmacaoId(null)
+    } catch (error) { setDataError(error instanceof ApiError ? error.message : "Não foi possível registrar a alta.") }
   }
 
-  const handleSolicitarExame = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSolicitarExame = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const patient = pacientes.find((item) => item.id === examForm.pacienteId)
-    if (!patient || !examForm.nome.trim() || !examForm.data) return
-    const request: SharedExamRequest = {
-      id: "EX-LOCAL-" + Date.now(),
-      pacienteId: patient.id,
-      tipo: examForm.tipo,
-      nome: examForm.nome.trim(),
-      data: new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(new Date(examForm.data + "T12:00:00")),
-      status: "agendado",
-      resultado: null,
-      solicitante: userName,
-      hora: examForm.hora || "A definir",
-    }
-    setExamesLocais((current) => [request, ...current])
-    logActivity("Médico", "Solicitação demonstrativa criada", patient.id, `${request.nome} · ${request.id}`)
-    setExamForm({ pacienteId: patient.id, nome: "", tipo: "ExameLaboratorial", data: localDateInputValue(), hora: "" })
-    setShowExamForm(false)
+    if (!patient || !examForm.nome.trim()) return
+    try {
+      const now = new Date()
+      const dataSolicitacao = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}T${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`
+      const bed = registeredBeds.find((item) => item.status === "Ocupado" && item.pacienteId === patient.id)
+      const attendance = await api.createAttendance({ data: dataSolicitacao, tipo: "SOLICITACAO_EXAME", descricao: examForm.nome.trim(), status: "PENDENTE", leitoId: bed ? Number(bed.id) : null, pacienteId: Number(patient.id), funcionarioResponsavelId: userId, medicoResponsavelId: userId }, token)
+      let saved: SharedExamRequest
+      if (examForm.tipo === "ExameLaboratorial") {
+        const result = await api.createLabExam({ dataSolicitacao, status: "SOLICITADO", observacoes: null, tipoAnalise: examForm.nome.trim(), amostra: examForm.amostra.trim(), metodo: examForm.metodo.trim(), pacienteId: Number(patient.id), medicoId: userId, atendimentoId: attendance.id }, token)
+        saved = { id: String(result.id), tipo: "ExameLaboratorial", nome: result.tipoAnalise, pacienteId: patient.id, data: result.dataSolicitacao.slice(0, 10).split("-").reverse().join("/"), status: "agendado", resultado: result.observacoes, solicitante: doctorProfile?.nome ?? userName, medicoId: String(userId), atendimentoId: String(attendance.id), amostra: result.amostra, metodo: result.metodo }
+      } else {
+        const result = await api.createImageExam({ dataSolicitacao, status: "SOLICITADO", observacoes: null, modalidade: examForm.modalidade.trim(), regiaoCorpo: examForm.regiaoCorpo.trim(), arquivoDigital: null, pacienteId: Number(patient.id), medicoId: userId, atendimentoId: attendance.id }, token)
+        saved = { id: String(result.id), tipo: "ExameImagem", nome: `${result.modalidade} · ${result.regiaoCorpo}`, pacienteId: patient.id, data: result.dataSolicitacao.slice(0, 10).split("-").reverse().join("/"), status: "agendado", resultado: result.observacoes, solicitante: doctorProfile?.nome ?? userName, medicoId: String(userId), atendimentoId: String(attendance.id), modalidade: result.modalidade, regiaoCorpo: result.regiaoCorpo }
+      }
+      setExames((current) => [saved, ...current])
+      logActivity("Médico", "Exame solicitado", patient.id, `${saved.nome} · ${saved.id}`)
+      setExamForm({ pacienteId: "", nome: "", tipo: "ExameLaboratorial", amostra: "", metodo: "", modalidade: "", regiaoCorpo: "" })
+      setShowExamForm(false)
+    } catch (error) { setDataError(error instanceof ApiError ? error.message : "Não foi possível registrar a solicitação de exame na API.") }
   }
-
-  const handleSalvarResultadoExame = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSalvarResultadoExame = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const exam = examesLocais.find((item) => item.id === resultExamId)
-    const result = examResultDraft.trim()
-    if (!exam || !result) return
-    setExamesLocais((current) => current.map((item) => item.id === exam.id ? { ...item, status: "resultado", resultado: result } : item))
-    logActivity("Médico", "Resultado de exame registrado", exam.pacienteId, `${exam.nome} · ${exam.id}`)
-    setResultExamId(null)
-    setExamResultDraft("")
+    const resultText = examResultDraft.trim()
+    if (!exam || !resultText || exam.tipo === "ECG") return
+    try {
+      if (exam.tipo === "ExameLaboratorial") {
+        const dto = (await api.listLabExams(token)).find((item) => String(item.id) === exam.id)
+        if (!dto) throw new Error("Exame laboratorial não encontrado na API.")
+        await api.updateLabExam(dto.id, { ...dto, status: "RESULTADO", observacoes: resultText }, token)
+      } else {
+        const dto = (await api.listImageExams(token)).find((item) => String(item.id) === exam.id)
+        if (!dto) throw new Error("Exame de imagem não encontrado na API.")
+        await api.updateImageExam(dto.id, { ...dto, status: "RESULTADO", observacoes: resultText }, token)
+      }
+      setExames((current) => current.map((item) => item.id === exam.id ? { ...item, status: "resultado", resultado: resultText } : item))
+      logActivity("Médico", "Resultado de exame registrado", exam.pacienteId, `${exam.nome} · ${exam.id}`)
+      setResultExamId(null); setExamResultDraft("")
+    } catch (error) { setDataError(error instanceof ApiError ? error.message : "Não foi possível registrar o resultado do exame.") }
   }
-
-  const handleSalvarEvolucaoClinica = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSalvarEvolucaoClinica = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const description = evolutionDraft.trim()
     if (!selectedPaciente || !description) return
-    const entry = {
-      data: new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date()),
-      descricao: description,
-      perfil: "Médico" as const,
-      profissional: userName,
-    }
-    setEvolucoesClinicas((current) => ({
-      ...current,
-      [selectedPaciente.id]: [entry, ...(current[selectedPaciente.id] ?? [])],
-    }))
-    logActivity("Médico", "Evolução clínica registrada", selectedPaciente.id, description.slice(0, 120))
-    setEvolutionDraft("")
-    setShowEvolutionForm(false)
+    try {
+      const now = new Date()
+      const data = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}T${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`
+      const bed = registeredBeds.find((item) => item.status === "Ocupado" && item.pacienteId === selectedPaciente.id)
+      const attendance = await api.createAttendance({ data, tipo: "CONSULTA_MEDICA", descricao: description, status: "CONCLUIDO", leitoId: bed ? Number(bed.id) : null, pacienteId: Number(selectedPaciente.id), funcionarioResponsavelId: userId, medicoResponsavelId: userId }, token)
+      const saved = await api.createClinicalRecord({ data, descricao: description, anamnese: null, exameFisico: null, diagnostico: null, conduta: null, observacao: null, medicoId: userId, atendimentoId: attendance.id }, token)
+      const entry = { data: new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(saved.data)), descricao: saved.descricao, perfil: "Médico" as const, profissional: userName }
+      setEvolucoesClinicas((current) => ({ ...current, [selectedPaciente.id]: [entry, ...(current[selectedPaciente.id] ?? [])] }))
+      logActivity("Médico", "Evolução clínica registrada", selectedPaciente.id, description.slice(0, 120))
+      setEvolutionDraft(""); setShowEvolutionForm(false)
+    } catch (error) { setDataError(error instanceof ApiError ? error.message : "Não foi possível registrar a evolução clínica na API.") }
   }
-
   // Navegação agrupada por assunto
   const tabs: { key: Tab; label: string; group: string }[] = [
     { key: "overview", label: "Visão Geral", group: "Clínico" },
@@ -754,11 +429,21 @@ export default function DoctorDashboard({
   const activeTabInfo = tabs.find((tab) => tab.key === activeTab)
 
   // ---- Apresentação (somente leitura dos dados já calculados acima) ----
-  const riskTone = (risk: string): Tone => (risk === "high" ? "danger" : risk === "medium" ? "warning" : "success")
-  const riskLabel = (risk: string) => riskColor[risk as keyof typeof riskColor]?.label ?? "Estável"
-  const riskIcon = (risk: string) => (risk === "high" ? "alert" : risk === "medium" ? "info" : "checkCircle")
-  const latestVitalsFor = (id: string) =>
-    evolucoesClinicas[id]?.find((entry) => entry.fc !== undefined || entry.temp !== undefined || entry.spo2 !== undefined || entry.pressao !== undefined) ?? registrosClinicos[id]?.[0]
+  const riskTone = (risk: string): Tone => (risk === "high" ? "danger" : risk === "medium" ? "warning" : risk === "low" ? "success" : "neutral")
+  const riskLabel = (risk: string) => riskColor[risk as keyof typeof riskColor]?.label ?? "Sem leitura"
+  const riskIcon = (risk: string) => (risk === "high" ? "alert" : risk === "medium" ? "info" : risk === "low" ? "checkCircle" : "info")
+  const latestVitalsFor = (id: string) => {
+    const saved = evolucoesClinicas[id]?.find((entry) => entry.fc !== undefined || entry.temp !== undefined || entry.spo2 !== undefined || entry.pressao !== undefined)
+    const live = liveVitals[id]
+    if (!live) return saved
+    return {
+      ...saved,
+      fc: live.heartRate ?? saved?.fc,
+      temp: live.temperature ?? saved?.temp,
+      spo2: live.oxygen ?? saved?.spo2,
+      pressao: live.systolic !== undefined && live.diastolic !== undefined ? `${live.systolic}/${live.diastolic}` : saved?.pressao,
+    }
+  }
   const examTypeMeta = (tipo: string) =>
     tipo === "ExameLaboratorial"
       ? { label: "Laboratorial", icon: "exames", tone: "info" as Tone }
@@ -793,7 +478,7 @@ export default function DoctorDashboard({
   const prescricoesAtivas = todasPrescricoes.filter(isPrescriptionActive)
   const prescricoesHistorico = todasPrescricoes.filter((rx) => !isPrescriptionActive(rx))
   const itensPendentes = todasPrescricoes.reduce((total, rx) => total + rx.itens.filter((item) => !medicacoesAdministradas.includes(item.id)).length, 0)
-  const pacientesAtencao = pacientes.filter((patient) => getPatientRisk(patient) !== "low").sort((a, b) => (getPatientRisk(a) === "high" ? -1 : 0) - (getPatientRisk(b) === "high" ? -1 : 0))
+  const pacientesAtencao = pacientesDoMedico.filter((patient) => getPatientRisk(patient) !== "low").sort((a, b) => (getPatientRisk(a) === "high" ? -1 : 0) - (getPatientRisk(b) === "high" ? -1 : 0))
   const examesVisiveis = examTypeFilter === "todos" ? todosExames : todosExames.filter((exam) => exam.tipo === examTypeFilter)
   const agendaPorData = agendaExibida.reduce<{ data: string; itens: typeof agendaExibida }[]>((groups, item) => {
     const group = groups.find((entry) => entry.data === item.data)
@@ -801,20 +486,18 @@ export default function DoctorDashboard({
     else groups.push({ data: item.data, itens: [item] })
     return groups
   }, [])
-  const mediaPressao = vitalsData.length ? Math.round(vitalsData.reduce((total, day) => total + day.bp, 0) / vitalsData.length) : 0
-  const picoPressao = vitalsData.reduce((peak, day) => (day.bp > peak.bp ? day : peak), { label: "—", bp: 0 })
   const itemHorario = (item: object) => ("horario" in item && typeof item.horario === "string" ? item.horario : "")
   const inputStyle = { background: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }
   const labelClass = "flex min-w-0 flex-col gap-1.5 text-xs font-semibold"
 
   return (
     <div className="role-medico min-h-screen" style={{ background: "var(--background)" }}>
-      <AlertNotifications alerts={monitoringAlerts} profile="Médico" onOpenAlerts={() => setActiveTab("alertas")} />
+      <AlertNotifications alerts={monitoringAlertsDoMedico} profile="Médico" onOpenAlerts={() => setActiveTab("alertas")} />
       <DashboardSidebar
         role="Médico"
-        initials="PC"
+        initials={userName.split(" ").filter(Boolean).map((part) => part[0]).slice(0, 2).join("").toUpperCase()}
         name={userName}
-        detail="Médico"
+        detail={doctorProfile?.especialidade ?? "Médico"}
         tabs={tabs}
         activeTab={activeTab}
         onSelect={(key) => setActiveTab(key as Tab)}
@@ -828,7 +511,7 @@ export default function DoctorDashboard({
           role="Médico"
           section={activeTabInfo?.label ?? ""}
           name={userName}
-          detail="Médico"
+          detail={doctorProfile?.especialidade ?? "Médico"}
           initials={userName.split(" ").filter(Boolean).map((part) => part[0]).slice(0, 2).join("").toUpperCase()}
           theme={theme}
           onToggleTheme={onToggleTheme}
@@ -843,7 +526,6 @@ export default function DoctorDashboard({
           <div className={activeTab === "monitoramento" ? "block" : "hidden"} aria-hidden={activeTab !== "monitoramento"}>
             <VitalMonitoring
               profile="Médico"
-              storageKey="inteliHosp-monitoramento"
               onAlertsChange={setMonitoringAlerts}
               acknowledgedAlerts={monitoringAcknowledged}
               setAcknowledgedAlerts={setMonitoringAcknowledged}
@@ -855,12 +537,12 @@ export default function DoctorDashboard({
             <div className="fade-in">
               <HeroHeader
                 eyebrow={`Cockpit clínico · ${shiftLabel()}`}
-                title={`${greeting()}, Dr. Pedro`}
-                subtitle={`${formatLongLocalDate()} · Cardiologia · Consultório 12`}
+                title={`${greeting()}, Dr. ${doctorProfile?.nome ?? userName}`}
+                subtitle={`${formatLongLocalDate()} · ${doctorProfile?.especialidade ?? "Agenda clínica"}${doctorProfile?.crm ? ` · CRM ${doctorProfile.crm}` : ""}`}
                 aside={
                   <div className="hero-actions grid grid-cols-3 gap-2 lg:flex lg:flex-wrap">
-                    <QuickAction variant="hero" icon="prescricao" label="Nova prescrição" onClick={() => openPrescriptionFor(pacientes[0]?.id ?? "")} />
-                    <QuickAction variant="hero" icon="exames" label="Solicitar exame" onClick={() => openExamFor(pacientes[0]?.id ?? "")} />
+                    <QuickAction variant="hero" icon="prescricao" label="Nova prescrição" onClick={() => openPrescriptionFor(pacientesDoMedico[0]?.id ?? "")} />
+                    <QuickAction variant="hero" icon="exames" label="Solicitar exame" onClick={() => openExamFor(pacientesDoMedico[0]?.id ?? "")} />
                     <QuickAction variant="hero" icon="monitoramento" label="Monitoramento" onClick={() => setActiveTab("monitoramento")} />
                   </div>
                 }
@@ -877,7 +559,7 @@ export default function DoctorDashboard({
                 <SectionCard
                   className="lg:col-span-2"
                   title="Agenda de hoje"
-                  description={`${consultasHoje.length} consulta${consultasHoje.length === 1 ? "" : "s"} · Consultório 12`}
+                  description={`${agendaExibida.length} consulta${agendaExibida.length === 1 ? "" : "s"} na agenda do médico`}
                   icon="agenda"
                   action={<button type="button" onClick={() => setActiveTab("agenda")} className="min-h-9 rounded-lg px-3 text-xs font-semibold" style={{ background: "var(--secondary)", color: "var(--primary)" }}>Abrir agenda</button>}
                 >
@@ -957,7 +639,7 @@ export default function DoctorDashboard({
                 </SectionCard>
 
                 <SectionCard
-                  className="lg:col-span-2"
+                  className="lg:col-span-3"
                   title="Pacientes que exigem atenção"
                   description="Ordenados por criticidade · últimos sinais vitais registrados"
                   icon="atendimento"
@@ -993,29 +675,6 @@ export default function DoctorDashboard({
                   )}
                 </SectionCard>
 
-                <SectionCard title="Pressão arterial" description="Média semanal dos monitorados · mmHg" icon="gauge">
-                  <div className="mb-4 grid grid-cols-2 gap-3">
-                    <div>
-                      <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>Média</p>
-                      <p className="text-xl font-bold tabular-nums" style={{ color: "var(--foreground)" }}>{mediaPressao}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>Pico · {picoPressao.label}</p>
-                      <p className="text-xl font-bold tabular-nums" style={{ color: picoPressao.bp > 135 ? "var(--danger-foreground)" : "var(--foreground)" }}>{picoPressao.bp}</p>
-                    </div>
-                  </div>
-                  <div className="flex h-28 items-end gap-2" role="img" aria-label={`Pressão sistólica média por dia: ${vitalsData.map((day) => `${day.label} ${day.bp}`).join(", ")}`}>
-                    {vitalsData.map((day) => (
-                      <div key={day.label} className="flex flex-1 flex-col items-center gap-1">
-                        <div className="w-full rounded-t-md" style={{ height: `${(day.bp / maxBP) * 92}px`, background: day.bp > 135 ? "var(--danger)" : "var(--role)", opacity: day.bp > 135 ? 0.85 : 0.75 }} />
-                        <span className="text-[11px]" style={{ color: "var(--muted-foreground)" }}>{day.label}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="mt-3 flex items-center gap-1.5 text-xs" style={{ color: "var(--muted-foreground)" }}>
-                    <span className="h-2 w-2 rounded-sm" style={{ background: "var(--danger)" }} aria-hidden="true" /> Acima de 135 mmHg
-                  </p>
-                </SectionCard>
               </div>
             </div>
           )}
@@ -1027,15 +686,15 @@ export default function DoctorDashboard({
                 subtitle="Prontuário eletrônico, sinais vitais e evolução clínica"
                 meta={
                   <>
-                    <MetaItem icon="atendimento" label="Pacientes" value={pacientes.length} />
-                    <MetaItem icon="alert" label="Críticos" value={pacientes.filter((patient) => getPatientRisk(patient) === "high").length} tone="danger" />
-                    <MetaItem icon="info" label="Em atenção" value={pacientes.filter((patient) => getPatientRisk(patient) === "medium").length} tone="warning" />
-                    <MetaItem icon="internacao" label="Com leito" value={pacientes.filter((patient) => patient.leito !== "—").length} tone="info" />
+                    <MetaItem icon="atendimento" label="Pacientes" value={pacientesDoMedico.length} />
+                    <MetaItem icon="alert" label="Críticos" value={pacientesDoMedico.filter((patient) => getPatientRisk(patient) === "high").length} tone="danger" />
+                    <MetaItem icon="info" label="Em atenção" value={pacientesDoMedico.filter((patient) => getPatientRisk(patient) === "medium").length} tone="warning" />
+                    <MetaItem icon="internacao" label="Com leito" value={pacientesDoMedico.filter((patient) => patient.leito !== "—").length} tone="info" />
                   </>
                 }
               />
               <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(300px,360px)_minmax(0,1fr)]">
-                <SectionCard title="Lista de pacientes" description={`${filteredPatients.length} de ${pacientes.length} exibidos`} icon="consulta-paciente" bodyClassName="p-3">
+                <SectionCard title="Lista de pacientes" description={`${filteredPatients.length} de ${pacientesDoMedico.length} exibidos`} icon="consulta-paciente" bodyClassName="p-3">
                   <div className="relative">
                     <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--muted-foreground)" }}>
                       <UiIcon name="search" size={16} />
@@ -1242,7 +901,7 @@ export default function DoctorDashboard({
                 }
               />
               {showPrescriptionForm && (
-                <SectionCard title="Nova prescrição" description="Prescrição demonstrativa · fica salva neste navegador" icon="prescricao" className="slide-up mb-5">
+                <SectionCard title="Nova prescrição" description="A prescrição será registrada na API e vinculada ao atendimento do paciente." icon="prescricao" className="slide-up mb-5">
                   <form onSubmit={handleSalvarPrescricao} className="flex flex-col gap-5">
                     <FormSection step={1} title="Paciente e medicamento">
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -1282,7 +941,7 @@ export default function DoctorDashboard({
                     </FormSection>
                     <div className="flex flex-col-reverse gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: "var(--border)" }}>
                       <p className="flex items-start gap-2 text-xs" style={{ color: "var(--muted-foreground)" }}>
-                        <UiIcon name="info" size={15} /> Formulário demonstrativo: não é uma ordem clínica real.
+                        <UiIcon name="info" size={15} /> Confira os dados e a dose antes de salvar. A confirmação será persistida no banco.
                       </p>
                       <div className="flex gap-2">
                         <button type="button" onClick={() => setShowPrescriptionForm(false)} className="min-h-11 flex-1 rounded-lg px-4 text-sm font-semibold sm:flex-none" style={{ background: "var(--secondary)", color: "var(--primary)" }}>Cancelar</button>
@@ -1439,19 +1098,28 @@ export default function DoctorDashboard({
                         </label>
                         <label className={labelClass} style={{ color: "var(--foreground)" }}>Categoria
                           <select value={examForm.tipo} onChange={(event) => setExamForm({ ...examForm, tipo: event.target.value as ExamType })} className="min-h-11 rounded-lg border px-3 text-sm font-normal" style={inputStyle}>
-                            <option value="ExameLaboratorial">Laboratorial</option><option value="ExameImagem">Imagem</option><option value="ECG">ECG</option>
+                            <option value="ExameLaboratorial">Laboratorial</option><option value="ExameImagem">Imagem</option>
                           </select>
                         </label>
                       </div>
                     </FormSection>
-                    <FormSection step={2} title="Agendamento previsto" description="Sem horário, o exame fica como “Solicitado” até a recepção agendar">
+                    <FormSection step={2} title="Dados do exame" description="A solicitação será vinculada ao paciente, médico e atendimento no banco de dados.">
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                        <label className={labelClass} style={{ color: "var(--foreground)" }}>Data prevista
-                          <input required type="date" value={examForm.data} onChange={(event) => setExamForm({ ...examForm, data: event.target.value })} className="min-h-11 rounded-lg border px-3 text-sm font-normal" style={inputStyle} />
-                        </label>
-                        <label className={labelClass} style={{ color: "var(--foreground)" }}>Horário (opcional)
-                          <input type="time" value={examForm.hora} onChange={(event) => setExamForm({ ...examForm, hora: event.target.value })} className="min-h-11 rounded-lg border px-3 text-sm font-normal" style={inputStyle} />
-                        </label>
+                        {examForm.tipo === "ExameLaboratorial" ? <>
+                          <label className={labelClass} style={{ color: "var(--foreground)" }}>Amostra
+                            <input required value={examForm.amostra} onChange={(event) => setExamForm({ ...examForm, amostra: event.target.value })} className="min-h-11 rounded-lg border px-3 text-sm font-normal" style={inputStyle} />
+                          </label>
+                          <label className={labelClass} style={{ color: "var(--foreground)" }}>Método
+                            <input required value={examForm.metodo} onChange={(event) => setExamForm({ ...examForm, metodo: event.target.value })} className="min-h-11 rounded-lg border px-3 text-sm font-normal" style={inputStyle} />
+                          </label>
+                        </> : <>
+                          <label className={labelClass} style={{ color: "var(--foreground)" }}>Modalidade
+                            <input required value={examForm.modalidade} onChange={(event) => setExamForm({ ...examForm, modalidade: event.target.value })} placeholder="Ex.: radiografia" className="min-h-11 rounded-lg border px-3 text-sm font-normal" style={inputStyle} />
+                          </label>
+                          <label className={labelClass} style={{ color: "var(--foreground)" }}>Região do corpo
+                            <input required value={examForm.regiaoCorpo} onChange={(event) => setExamForm({ ...examForm, regiaoCorpo: event.target.value })} className="min-h-11 rounded-lg border px-3 text-sm font-normal" style={inputStyle} />
+                          </label>
+                        </>}
                       </div>
                     </FormSection>
                     <div className="flex flex-col-reverse gap-2 border-t pt-4 sm:flex-row sm:justify-end" style={{ borderColor: "var(--border)" }}>
@@ -1537,7 +1205,7 @@ export default function DoctorDashboard({
             <div className="fade-in">
               <PageTitle
                 title="Agenda médica"
-                subtitle="Consultas compartilhadas com a recepção · Consultório 12"
+                subtitle={`Consultas atribuídas a ${doctorProfile?.nome ?? userName} · ${doctorProfile?.especialidade ?? "agenda médica"}`}
                 meta={
                   <>
                     <MetaItem icon="agenda" label="Consultas" value={agendaExibida.length} tone="info" />
@@ -1696,7 +1364,7 @@ export default function DoctorDashboard({
             </div>
           )}
 
-          {activeTab === "atividades" && <ActivityLog />}
+          {activeTab === "atividades" && <ActivityLog token={token} role="MEDICO" />}
 
           {activeTab === "alertas" && (
             <div className="fade-in">
@@ -1720,7 +1388,7 @@ export default function DoctorDashboard({
               />
 
               <MonitoringAlertsPanel
-                alerts={monitoringAlerts}
+                alerts={monitoringAlertsDoMedico}
                 profile="Médico"
                 acknowledgedKeys={monitoringAcknowledged}
                 setAcknowledgedKeys={setMonitoringAcknowledged}
@@ -1732,7 +1400,7 @@ export default function DoctorDashboard({
                 {alertas.map((a) => {
                   const p = pacientes.find((x) => x.id === a.pacienteId)
                   const tone = riskTone(a.severity)
-                  const reconhecido = alertasReconhecidos.includes(a.id)
+                  const reconhecido = !a.ativo
                   return (
                     <article
                       key={a.id}

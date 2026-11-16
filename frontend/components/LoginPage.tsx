@@ -230,7 +230,7 @@ export default function LoginPage({ onLogin, onRoleSelect, theme, onToggleTheme 
       </div>
 
       {/* Formulário */}
-      <main className="relative flex flex-1 items-center justify-center bg-[var(--background)] px-4 py-20 sm:px-6 lg:px-12">
+      <main className="relative flex flex-1 items-center justify-center bg-[var(--background)] px-4 py-20 sm:px-6 lg:px-12 lg:py-3">
         <div className="absolute right-4 top-4 z-20 sm:right-6 sm:top-6">
           <ThemeToggle theme={theme} onToggle={onToggleTheme} />
         </div>
@@ -248,7 +248,7 @@ export default function LoginPage({ onLogin, onRoleSelect, theme, onToggleTheme 
           </div>
 
           <div
-            className="rounded-2xl border p-6 sm:p-8"
+            className="rounded-2xl border p-6 sm:p-8 lg:p-6"
             style={{ background: "var(--card)", borderColor: "var(--border)", boxShadow: "var(--shadow-md)" }}
           >
             <h2 className="text-2xl font-bold tracking-tight" style={{ color: "var(--foreground)" }}>
@@ -259,11 +259,11 @@ export default function LoginPage({ onLogin, onRoleSelect, theme, onToggleTheme 
             </p>
 
             {/* Seletor de perfis */}
-            <fieldset className="mt-6">
+            <fieldset className="mt-6 lg:mt-4">
               <legend className="mb-2.5 text-xs font-semibold" style={{ color: "var(--foreground)" }}>
                 Perfil de acesso
               </legend>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3" role="radiogroup" aria-label="Perfil de acesso">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3 lg:grid-cols-2" role="radiogroup" aria-label="Perfil de acesso">
                 {roles.map((r) => {
                   const active = role === r.key
                   return (
@@ -279,7 +279,7 @@ export default function LoginPage({ onLogin, onRoleSelect, theme, onToggleTheme 
                         setPassword("")
                         setLoginNotice("")
                       }}
-                      className="relative flex min-h-[104px] flex-col items-center justify-center gap-2 rounded-xl border-2 px-1.5 py-3 text-center transition-all duration-150 hover:border-[var(--border-strong)]"
+                      className="relative flex min-h-[104px] flex-col items-center justify-center gap-2 rounded-xl border-2 px-1.5 py-3 text-center transition-all duration-150 hover:border-[var(--border-strong)] lg:min-h-[72px] lg:flex-row lg:justify-start lg:gap-3 lg:px-3 lg:py-2 lg:text-left"
                       style={{
                         borderColor: active ? "var(--primary)" : "var(--border)",
                         background: active ? "color-mix(in srgb, var(--primary) 8%, var(--card))" : "var(--card)",
@@ -296,7 +296,7 @@ export default function LoginPage({ onLogin, onRoleSelect, theme, onToggleTheme 
                         </span>
                       )}
                       <span
-                        className="flex h-10 w-10 items-center justify-center rounded-lg"
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg lg:h-9 lg:w-9"
                         style={{
                           background: active ? "var(--primary)" : "var(--secondary)",
                           color: active ? "var(--primary-foreground)" : "var(--control-foreground)",
@@ -304,11 +304,13 @@ export default function LoginPage({ onLogin, onRoleSelect, theme, onToggleTheme 
                       >
                         <RoleIcon role={r.key} />
                       </span>
-                      <span className="text-[13px] font-semibold leading-tight" style={{ color: "var(--foreground)" }}>
-                        {r.label}
-                      </span>
-                      <span className="hidden text-[11px] leading-snug sm:block" style={{ color: "var(--muted-foreground)" }}>
-                        {r.description}
+                      <span className="flex min-w-0 flex-col items-center lg:items-start">
+                        <span className="text-[13px] font-semibold leading-tight" style={{ color: "var(--foreground)" }}>
+                          {r.label}
+                        </span>
+                        <span className="hidden text-[11px] leading-snug sm:block" style={{ color: "var(--muted-foreground)" }}>
+                          {r.description}
+                        </span>
                       </span>
                     </button>
                   )
@@ -316,7 +318,7 @@ export default function LoginPage({ onLogin, onRoleSelect, theme, onToggleTheme 
               </div>
             </fieldset>
 
-            <form onSubmit={handleLogin} className="mt-6 flex flex-col gap-4">
+            <form onSubmit={handleLogin} className="mt-6 flex flex-col gap-4 lg:mt-4 lg:gap-3">
               <div>
                 <label htmlFor="login-email" className="mb-1.5 block text-xs font-semibold" style={{ color: "var(--foreground)" }}>
                   E-mail
@@ -351,7 +353,7 @@ export default function LoginPage({ onLogin, onRoleSelect, theme, onToggleTheme 
                   </label>
                   <button
                     type="button"
-                    onClick={() => setLoginNotice("A recuperação de senha ainda não está conectada neste protótipo.")}
+                    onClick={() => setLoginNotice("Contate o administrador do sistema ou responsável do hospital para solicitar a recuperação da sua senha ou a criação de uma nova.")}
                     className="text-xs font-medium hover:underline"
                     style={{ color: "var(--control-foreground)" }}
                   >
@@ -436,10 +438,10 @@ export default function LoginPage({ onLogin, onRoleSelect, theme, onToggleTheme 
           </div>
 
       <p className="mt-6 text-center text-xs leading-relaxed" style={{ color: "var(--muted-foreground)" }}>
-            Acesso autenticado pela API. O painel e as permissões são definidos pelo perfil da conta.{" "}
+            O painel e as permissões são definidos pelo perfil da conta.{" "}
             <button
               type="button"
-              onClick={() => setLoginNotice("Solicitações de acesso ainda não são recebidas pelo protótipo. Use um perfil demonstrativo para navegar.")}
+              onClick={() => setLoginNotice("Contate o administrador do sistema ou responsável do hospital para solicitar a realização do seu cadastro.")}
               className="font-semibold hover:underline"
               style={{ color: "var(--control-foreground)" }}
             >

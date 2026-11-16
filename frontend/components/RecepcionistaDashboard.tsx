@@ -5,11 +5,10 @@ import { Avatar, ShowMoreButton, summaryLimit, DashboardHeader, EmptyState, Form
 import { greeting } from "./dateUtils"
 import logo from "./logo.webp?no-inline"
 import type { Theme } from "./ThemeToggle"
-import useLocalStorageState from "./useLocalStorageState"
 import ActivityLog from "./ActivityLog"
 import { logActivity } from "./activityStore"
 import { formatLongLocalDate, localDateInputValue, type ReceptionAppointment } from "./appointmentStore"
-import { initialHospitalSectors, type RegisteredBed, type RegisteredPatient } from "./patientStore"
+import type { RegisteredBed, RegisteredPatient } from "./patientStore"
 import type { Hospitalization } from "./hospitalizationStore"
 import type { SharedExamRequest } from "./examStore"
 import { usePanelRoute } from "../hooks/usePanelRoute"
@@ -30,60 +29,6 @@ type Tab = "recepcao" | "cadastro-paciente" | "consulta-paciente" | "atividades"
 // ---------------------------------------------------------------------------
 // Dados base
 // ---------------------------------------------------------------------------
-
-const historicoAtendimentos: Record<string, {
-  data: string
-  tipo: string
-  medico: string
-  local: string
-}[]> = {
-  "PAC-001": [
-    {
-      data: "15 Set 2026",
-      tipo: "Consulta",
-      medico: "Dr. Rafael Oliveira",
-      local: "Consultório 12",
-    },
-    {
-      data: "10 Set 2026",
-      tipo: "Exame",
-      medico: "Dr. Rafael Oliveira",
-      local: "Laboratório",
-    },
-  ],
-  "PAC-002": [
-    {
-      data: "12 Set 2026",
-      tipo: "Retorno",
-      medico: "Dra. Fernanda Lima",
-      local: "Consultório 08",
-    },
-  ],
-  "PAC-003": [
-    {
-      data: "14 Set 2026",
-      tipo: "Internação",
-      medico: "Dra. Fernanda Lima",
-      local: "Leito 14B",
-    },
-  ],
-  "PAC-004": [
-    {
-      data: "13 Set 2026",
-      tipo: "Consulta",
-      medico: "Dr. Rafael Oliveira",
-      local: "Consultório 12",
-    },
-  ],
-  "PAC-005": [
-    {
-      data: "11 Set 2026",
-      tipo: "Internação",
-      medico: "Dr. Rafael Oliveira",
-      local: "Leito 22A",
-    },
-  ],
-}
 
 // Leitos
 type Leito = RegisteredBed
@@ -110,16 +55,6 @@ const horariosDisponiveis = [
 
 
 // Agendamentos já ocupados
-const tiposExame = [
-  "Hemograma",
-  "Raio-X",
-  "ECG",
-  "Ultrassom",
-  "Tomografia",
-  "Ressonância",
-]
-
-const examesAgendados: { id: string; paciente: string; exame: string; data: string; hora: string; setor: string }[] = []
 
 // ---------------------------------------------------------------------------
 // Validação de CPF (algoritmo oficial)
@@ -250,8 +185,8 @@ export default function ReceptionistDashboard({
   const loadReceptionData = async () => {
     setApiLoading(true)
     try {
-      const [patientsDto, bedsDto, internmentsDto, appointmentsDto, doctors] = await Promise.all([
-        api.listPatients(token), api.listBeds(token), api.listInternments(token), api.listAppointments(token), api.listDoctors(token),
+      const [patientsDto, bedsDto, internmentsDto, appointmentsDto, doctors, imageExams, labExams] = await Promise.all([
+        api.listPatients(token), api.listBeds(token), api.listInternments(token), api.listAppointments(token), api.listDoctors(token), api.listImageExams(token), api.listLabExams(token),
       ])
       const patients = patientsDto.map(mapPatient)
       setPacientesCadastrados(patients)
@@ -259,6 +194,10 @@ export default function ReceptionistDashboard({
       setInternacoesLocais(internmentsDto.map((internment) => mapInternment(internment, bedsDto, doctors)))
       setAgendamentos(appointmentsDto.map((appointment) => mapAppointment(appointment, patients)))
       setMedicosDisponiveis(doctors)
+      setExamesSolicitados([
+        ...labExams.filter((exam) => exam.pacienteId !== null).map((exam) => ({ id: String(exam.id), tipo: "ExameLaboratorial" as const, nome: exam.tipoAnalise, pacienteId: String(exam.pacienteId), data: exam.dataSolicitacao.slice(0, 10).split("-").reverse().join("/"), status: /result|conclu/i.test(exam.status) ? "resultado" as const : /andamento/i.test(exam.status) ? "em andamento" as const : "agendado" as const, resultado: exam.observacoes, solicitante: doctors.find((doctor) => doctor.id === exam.medicoId)?.nome ?? "Médico", medicoId: String(exam.medicoId), atendimentoId: String(exam.atendimentoId) })),
+        ...imageExams.filter((exam) => exam.pacienteId !== null).map((exam) => ({ id: String(exam.id), tipo: "ExameImagem" as const, nome: `${exam.modalidade} · ${exam.regiaoCorpo}`, pacienteId: String(exam.pacienteId), data: exam.dataSolicitacao.slice(0, 10).split("-").reverse().join("/"), status: /result|conclu/i.test(exam.status) ? "resultado" as const : /andamento/i.test(exam.status) ? "em andamento" as const : "agendado" as const, resultado: exam.observacoes, solicitante: doctors.find((doctor) => doctor.id === exam.medicoId)?.nome ?? "Médico", medicoId: String(exam.medicoId), atendimentoId: String(exam.atendimentoId), modalidade: exam.modalidade, regiaoCorpo: exam.regiaoCorpo })),
+      ])
       setFormAgendamento((current) => ({ ...current, medicoId: current.medicoId || String(doctors[0]?.id ?? "") }))
       setApiError("")
     } catch (error) {
@@ -306,7 +245,7 @@ export default function ReceptionistDashboard({
       return true
     })
   }, [leitos, filtroStatus, filtroAndar, filtroSetor, filtroTipo])
-  const setoresDisponiveis = [...new Set([...initialHospitalSectors, ...leitos.map((bed) => bed.setor).filter(Boolean)])].sort((a, b) => a.localeCompare(b, "pt-BR"))
+  const setoresDisponiveis = [...new Set(leitos.map((bed) => bed.setor).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"))
   const leitoMapaSelecionado = leitos.find((bed) => bed.id === leitoMapaSelecionadoId)
 
   const leitosDisponiveis = leitos.filter((l) => l.status === "Disponível")
@@ -324,12 +263,9 @@ export default function ReceptionistDashboard({
 
   const examesDaRecepcao = useMemo(() => examesSolicitados.map((exam) => {
     const patient = pacientesCadastrados.find((item) => item.id === exam.pacienteId)
-    const setor = exam.tipo === "ExameLaboratorial" ? "Laboratório" : exam.tipo === "ExameImagem" ? "Imagem" : "Cardiologia"
     return {
       ...exam,
       paciente: patient?.nome ?? "Paciente não encontrado",
-      setor,
-      hora: exam.hora ?? "A definir",
     }
   }), [examesSolicitados, pacientesCadastrados])
 
@@ -346,6 +282,10 @@ export default function ReceptionistDashboard({
       }]
     })
   const pacientesDisponiveisParaInternacao = pacientesCadastrados.filter((patient) => !leitos.some((bed) => bed.status === "Ocupado" && bed.pacienteId === patient.id))
+  const historicoPaciente = (patientId: string) => [
+    ...agendamentos.filter((item) => item.pacienteId === patientId).map((item) => ({ data: new Date(`${item.data}T12:00:00`).toLocaleDateString("pt-BR"), tipo: "Consulta", medico: medicoPorId(item.medicoId)?.nome ?? "Médico", local: "Agenda médica" })),
+    ...internacoesLocais.filter((item) => item.pacienteId === patientId).map((item) => ({ data: item.dataEntrada, tipo: item.status === "Ativa" ? "Internação ativa" : "Internação", medico: item.medico, local: `Leito ${item.leito}` })),
+  ].sort((a, b) => b.data.localeCompare(a.data))
 
   // ----------------------------------------------------------
   // Handlers
@@ -532,13 +472,6 @@ export default function ReceptionistDashboard({
     } catch (error) { setApiError(error instanceof ApiError ? error.message : "Não foi possível criar o agendamento.") }
   }
 
-  const handleIniciarExame = (examId: string) => {
-    const exam = examesSolicitados.find((item) => item.id === examId)
-    if (!exam || exam.status !== "agendado") return
-    setExamesSolicitados((current) => current.map((item) => item.id === examId ? { ...item, status: "em andamento" } : item))
-    logActivity("Recepção", "Exame encaminhado para execução", exam.pacienteId, `${exam.nome} · ${exam.id}`)
-  }
-
   // Navegação agrupada por assunto
   const tabs: { key: Tab; label: string; group: string }[] = [
     { key: "recepcao", label: "Central da Recepção", group: "Atendimento" },
@@ -558,7 +491,7 @@ export default function ReceptionistDashboard({
   const consultasHoje = agendamentos.filter((item) => item.data === hoje).sort((a, b) => a.hora.localeCompare(b.hora))
   const limiteAtendimentosCelular = summaryLimit(consultasHoje.length, 3)
   const limiteMedicosCelular = summaryLimit(medicosDisponiveis.length, 2)
-  const limiteExamesCelular = summaryLimit(examesAgendados.length + examesDaRecepcao.length, 3)
+  const limiteExamesCelular = summaryLimit(examesDaRecepcao.length, 3)
   const medicoPorId = (id: string) => medicosDisponiveis.find((doctor) => String(doctor.id) === id)
   const iniciais = (nome: string) => nome.split(" ").filter(Boolean).map((part) => part[0]).slice(0, 2).join("").toUpperCase()
   const ocupacaoPercentual = leitos.length ? Math.round((leitosOcupados.length / leitos.length) * 100) : 0
@@ -595,7 +528,7 @@ export default function ReceptionistDashboard({
   const avisos = [
     contarLeitos("Higienização") > 0 && { tone: "warning" as Tone, icon: "clock", text: `${contarLeitos("Higienização")} leito(s) aguardando liberação após higienização`, action: () => { setFiltroStatus("Higienização"); setActiveTab("mapa-leitos") } },
     contarLeitos("Manutenção") > 0 && { tone: "neutral" as Tone, icon: "shield", text: `${contarLeitos("Manutenção")} leito(s) em manutenção`, action: () => { setFiltroStatus("Manutenção"); setActiveTab("mapa-leitos") } },
-    examesDaRecepcao.filter((exam) => exam.status === "agendado").length > 0 && { tone: "info" as Tone, icon: "exames", text: `${examesDaRecepcao.filter((exam) => exam.status === "agendado").length} exame(s) solicitado(s) pelos médicos aguardando execução`, action: undefined },
+    examesDaRecepcao.filter((exam) => exam.status === "agendado").length > 0 && { tone: "info" as Tone, icon: "exames", text: `${examesDaRecepcao.filter((exam) => exam.status === "agendado").length} exame(s) solicitado(s) pelos médicos`, action: undefined },
     leitosDisponiveis.length === 0 && { tone: "danger" as Tone, icon: "alert", text: "Nenhum leito disponível para novas internações", action: () => setActiveTab("mapa-leitos") },
   ].filter((item): item is { tone: Tone; icon: string; text: string; action: (() => void) | undefined } => Boolean(item))
   const enviarFicha = (pacienteId: string, leitoNumero: string) => {
@@ -632,7 +565,7 @@ export default function ReceptionistDashboard({
         <main className="dashboard-main mx-auto w-full min-w-0 max-w-[1400px] flex-1 px-4 pb-36 pt-20 sm:px-6 sm:pb-24 xl:p-8">
           {apiLoading && <p role="status" className="mb-4 rounded-xl border px-4 py-3 text-sm" style={{ background: "var(--secondary)", borderColor: "var(--border)", color: "var(--muted-foreground)" }}>Carregando dados da API…</p>}
           {apiError && <p role="alert" className="mb-4 rounded-xl border px-4 py-3 text-sm" style={{ background: "var(--danger-surface)", borderColor: "var(--border)", color: "var(--danger-foreground)" }}>{apiError}</p>}
-          {activeTab === "atividades" && <ActivityLog />}
+          {activeTab === "atividades" && <ActivityLog token={token} role="RECEPCIONISTA" />}
           {/* ============ CENTRAL DA RECEPÇÃO ============ */}
           {activeTab === "recepcao" && (
             <div className="fade-in">
@@ -650,7 +583,7 @@ export default function ReceptionistDashboard({
               >
                 <div className="keep-2-cols grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
                   <HeroStat label="Consultas hoje" value={consultasHoje.length} hint={`${consultasHoje.filter((item) => (item.status ?? "Agendada") === "Agendada").length} aguardando`} />
-                  <HeroStat label="Exames marcados" value={examesAgendados.length + examesDaRecepcao.length} hint="Hoje e próximos dias" />
+                  <HeroStat label="Exames solicitados" value={examesDaRecepcao.length} hint="Dados registrados na API" />
                   <HeroStat label="Leitos disponíveis" value={leitosDisponiveis.length} hint={`de ${leitos.length} leitos`} alert={leitosDisponiveis.length === 0} />
                   <HeroStat label="Pacientes internados" value={leitosOcupados.length} hint={`Ocupação de ${ocupacaoPercentual}%`} />
                 </div>
@@ -730,31 +663,19 @@ export default function ReceptionistDashboard({
               <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
                 <SectionCard className="lg:col-span-2" title="Exames marcados" description="Agenda de exames e solicitações dos médicos" icon="exames" bodyClassName="p-2 sm:p-3">
                   <ul className="space-y-1" id="lista-exames-recepcao">
-                    {examesAgendados.map((exam, index) => (
-                      <li key={exam.id} className={"grid grid-cols-[3.5rem_minmax(0,1fr)_auto] items-center gap-3 rounded-xl p-2.5" + (index >= limiteExamesCelular && !listasExpandidas.exames ? " max-sm:hidden" : "")}>
-                        <span className="text-center font-mono text-sm font-semibold tabular-nums" style={{ color: "var(--role-strong)" }}>{exam.hora}</span>
-                        <span className="min-w-0">
-                          <span className="block break-words text-sm font-semibold" style={{ color: "var(--foreground)" }}>{exam.exame}</span>
-                          <span className="block break-words text-xs" style={{ color: "var(--muted-foreground)" }}>{exam.paciente} · {exam.setor}</span>
-                        </span>
-                        <span className="text-xs font-medium tabular-nums" style={{ color: exam.data === hoje ? "var(--role-strong)" : "var(--muted-foreground)" }}>{exam.data === hoje ? "Hoje" : exam.data.split("-").reverse().join("/")}</span>
-                      </li>
-                    ))}
                     {examesDaRecepcao.map((exam, index) => (
-                      <li key={exam.id} className={"grid grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-3 rounded-xl border p-2.5 sm:grid-cols-[3.5rem_minmax(0,1fr)_auto]" + (examesAgendados.length + index >= limiteExamesCelular && !listasExpandidas.exames ? " max-sm:hidden" : "")} style={{ borderColor: "var(--border)" }}>
-                        <span className="text-center font-mono text-sm font-semibold tabular-nums" style={{ color: "var(--role-strong)" }}>{exam.hora === "A definir" ? "—" : exam.hora}</span>
+                      <li key={exam.id} className={"grid grid-cols-[minmax(0,1fr)] items-center gap-3 rounded-xl border p-2.5 sm:grid-cols-[minmax(0,1fr)_auto]" + (index >= limiteExamesCelular && !listasExpandidas.exames ? " max-sm:hidden" : "")} style={{ borderColor: "var(--border)" }}>
                         <span className="min-w-0">
                           <span className="block break-words text-sm font-semibold" style={{ color: "var(--foreground)" }}>{exam.nome}</span>
-                          <span className="block break-words text-xs" style={{ color: "var(--muted-foreground)" }}>{exam.paciente} · {exam.setor} · {exam.data} · por {exam.solicitante}</span>
+                          <span className="block break-words text-xs" style={{ color: "var(--muted-foreground)" }}>{exam.paciente} · {exam.data} · por {exam.solicitante}</span>
                         </span>
                         <span className="col-span-2 flex flex-wrap items-center gap-2 sm:col-span-1">
                           <StatusBadge tone={exam.status === "agendado" ? "neutral" : exam.status === "em andamento" ? "warning" : "success"} size="sm">{exam.status === "agendado" ? "Solicitado" : exam.status === "em andamento" ? "Em andamento" : "Resultado disponível"}</StatusBadge>
-                          {exam.status === "agendado" && <button type="button" onClick={() => handleIniciarExame(exam.id)} className="min-h-9 rounded-lg px-3 text-xs font-semibold" style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}>Iniciar exame</button>}
                         </span>
                       </li>
                     ))}
                   </ul>
-                  <ShowMoreButton expanded={!!listasExpandidas.exames} onToggle={() => alternarLista("exames")} hiddenCount={examesAgendados.length + examesDaRecepcao.length - limiteExamesCelular} controls="lista-exames-recepcao" label={["exame", "exames"]} />
+                  <ShowMoreButton expanded={!!listasExpandidas.exames} onToggle={() => alternarLista("exames")} hiddenCount={examesDaRecepcao.length - limiteExamesCelular} controls="lista-exames-recepcao" label={["exame", "exames"]} />
                 </SectionCard>
 
                 <div className="flex flex-col gap-5">
@@ -1079,9 +1000,9 @@ export default function ReceptionistDashboard({
                     </SectionCard>
 
                     <SectionCard title="Histórico de atendimentos" icon="atividades">
-                      {(historicoAtendimentos[pacienteEncontrado.id] ?? []).length ? (
+                      {historicoPaciente(pacienteEncontrado.id).length ? (
                         <ol>
-                          {(historicoAtendimentos[pacienteEncontrado.id] ?? []).map((h, i, list) => (
+                          {historicoPaciente(pacienteEncontrado.id).map((h, i, list) => (
                             <TimelineItem key={i} last={i === list.length - 1} title={h.tipo} meta={h.data} tone={h.tipo === "Internação" ? "danger" : h.tipo === "Exame" ? "violet" : "role"}>
                               {h.medico} · {h.local}
                             </TimelineItem>
@@ -1627,7 +1548,7 @@ export default function ReceptionistDashboard({
                 const leito = leitos.find((l) => l.pacienteId === fichaPacienteId)
                 if (!pac || !leito) return <EmptyState icon="ficha" title="Paciente sem internação ativa" description="Selecione outro paciente internado." />
                 const internacao = internacoesLocais.find((item) => item.pacienteId === fichaPacienteId && item.status === "Ativa")
-                const hist = historicoAtendimentos[fichaPacienteId] ?? []
+                const hist = historicoPaciente(fichaPacienteId)
                 const ultimo = hist[0]
                 const medico = ultimo ? medicosDisponiveis.find((m) => m.nome === ultimo.medico) : null
                 const numeroFicha = `FA-${pac.id.replace("PAC-", "")}-${String(new Date().getFullYear()).slice(2)}`

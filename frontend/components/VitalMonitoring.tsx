@@ -35,7 +35,6 @@ interface Props {
   patients: MonitoredPatient[]
   liveVitals: Record<string, LiveVitalReading>
   profile: "Médico" | "Enfermagem"
-  storageKey: string
   acknowledgedAlerts: string[]
   setAcknowledgedAlerts: React.Dispatch<React.SetStateAction<string[]>>
   onAlertsChange: (alerts: MonitoringAlert[]) => void
@@ -167,89 +166,6 @@ function makeRecords(patients: MonitoredPatient[]): MonitorRecord[] {
   })
 }
 
-function isVitalSample(value: unknown): value is VitalSample {
-  if (!value || typeof value !== "object") return false
-  const sample = value as Partial<VitalSample>
-  return typeof sample.time === "string" &&
-    Number.isFinite(sample.heartRate) &&
-    Number.isFinite(sample.oxygen) &&
-    Number.isFinite(sample.respiration) &&
-    Number.isFinite(sample.temperature)
-}
-
-function isMonitorRecord(value: unknown): value is MonitorRecord {
-  if (!value || typeof value !== "object") return false
-  const record = value as Partial<MonitorRecord>
-  return typeof record.id === "string" &&
-    typeof record.name === "string" &&
-    typeof record.bed === "string" &&
-    typeof record.sector === "string" &&
-    typeof record.condition === "string" &&
-    typeof record.connected === "boolean" &&
-    Array.isArray(record.available) &&
-    typeof record.ecgAbnormal === "boolean" &&
-    typeof record.deviceName === "string" &&
-    typeof record.deviceId === "string" &&
-    typeof record.time === "string" &&
-    Number.isFinite(record.heartRate) &&
-    Number.isFinite(record.oxygen) &&
-    Number.isFinite(record.respiration) &&
-    Number.isFinite(record.temperature) &&
-    Array.isArray(record.history) &&
-    record.history.every(isVitalSample)
-}
-
-function readSavedRecords(storageKey: string, patients: MonitoredPatient[]) {
-  const initial = makeRecords(patients)
-  try {
-    const legacyKeys = storageKey === "inteliHosp-monitoramento"
-      ? ["inteliHosp-monitoramento-medico", "inteliHosp-monitoramento-enfermagem"]
-      : []
-    const canonical = localStorage.getItem(storageKey)
-    const saved = canonical
-      ? JSON.parse(canonical) as MonitorRecord[] | null
-      : legacyKeys.flatMap((key) => {
-          try {
-            const records = JSON.parse(localStorage.getItem(key) ?? "[]") as MonitorRecord[]
-            return Array.isArray(records) ? records : []
-          } catch {
-            return []
-          }
-        })
-    if (!Array.isArray(saved)) return initial
-    const validSaved = saved.filter(isMonitorRecord)
-    const currentIds = new Set(initial.map((record) => record.id))
-    const currentRecords = initial.map((record) => {
-      const stored = validSaved.find((item) => item.id === record.id)
-      return stored
-        ? { ...record, ...stored, history: Array.isArray(stored.history) ? stored.history.slice(-720) : record.history }
-        : record
-    })
-    const archivedRecords = validSaved.filter((record) => !currentIds.has(record.id))
-    return [...currentRecords, ...archivedRecords]
-  } catch {
-    return initial
-  }
-}
-
-function readSavedThresholds(storageKey: string): Thresholds {
-  try {
-    const stored = JSON.parse(localStorage.getItem(storageKey) ?? "null") as Partial<Thresholds> | null
-    return { ...defaultThresholds, ...stored }
-  } catch {
-    return defaultThresholds
-  }
-}
-
-function readOccurrences(storageKey: string): Occurrence[] {
-  try {
-    const saved = JSON.parse(localStorage.getItem(storageKey) ?? "[]") as Occurrence[]
-    return Array.isArray(saved) ? saved : []
-  } catch {
-    return []
-  }
-}
-
 function points(values: number[], min: number, max: number) {
   return values
     .map((value, index) => {
@@ -275,16 +191,16 @@ function Metric({ label, short, value, unit, color, alarm = false, offline = fal
   )
 }
 
-export default function VitalMonitoring({ patients, liveVitals, profile, storageKey, acknowledgedAlerts, setAcknowledgedAlerts, onAlertsChange }: Props) {
-  const [records, setRecords] = useState(() => readSavedRecords(storageKey, patients))
+export default function VitalMonitoring({ patients, liveVitals, profile, acknowledgedAlerts, setAcknowledgedAlerts, onAlertsChange }: Props) {
+  const [records, setRecords] = useState(() => makeRecords(patients))
   const patientIdsKey = patients.map((patient) => patient.id).join("|")
   const activePatientIds = useMemo(() => new Set(patientIdsKey ? patientIdsKey.split("|") : []), [patientIdsKey])
-  const [thresholds, setThresholds] = useState(() => readSavedThresholds(storageKey + "-thresholds"))
+  const [thresholds, setThresholds] = useState(defaultThresholds)
   const [filter, setFilter] = useState<Filter>("all")
   const [query, setQuery] = useState("")
   const [selectedId, setSelectedId] = useState(patients[0]?.id ?? "")
   const [showAllHistory, setShowAllHistory] = useState(false)
-  const [occurrences, setOccurrences] = useState(() => readOccurrences(storageKey + "-occurrences"))
+  const [occurrences, setOccurrences] = useState<Occurrence[]>([])
 
   useEffect(() => {
     setRecords((current) => {
@@ -338,22 +254,6 @@ export default function VitalMonitoring({ patients, liveVitals, profile, storage
     })), 1000)
     return () => window.clearInterval(timer)
   }, [liveVitals])
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(storageKey + "-thresholds", JSON.stringify(thresholds))
-    } catch {
-      // Os limites permanecem ativos durante a sessão mesmo sem armazenamento local.
-    }
-  }, [storageKey, thresholds])
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(storageKey + "-occurrences", JSON.stringify(occurrences))
-    } catch {
-      // O histórico permanece disponível durante a sessão se o navegador bloquear o armazenamento.
-    }
-  }, [occurrences, storageKey])
 
   const visibleRecords = useMemo(() => records.filter((record) => activePatientIds.has(record.id)), [activePatientIds, records])
   const selected = visibleRecords.find((record) => record.id === selectedId) ?? visibleRecords[0]
@@ -714,7 +614,7 @@ export default function VitalMonitoring({ patients, liveVitals, profile, storage
               </div>
             </div>
             <details className="mt-4 rounded-xl border p-3" style={{ background: "var(--background)", borderColor: "var(--border)" }}>
-              <summary className="monitor-summary -m-3 flex min-h-11 cursor-pointer items-center rounded-xl p-3 text-xs font-bold" style={{ color: "var(--foreground)" }}>Configurar limites demonstrativos</summary>
+              <summary className="monitor-summary -m-3 flex min-h-11 cursor-pointer items-center rounded-xl p-3 text-xs font-bold" style={{ color: "var(--foreground)" }}>Configurar limites de alerta</summary>
               <div className="mt-3 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
                 {[
                   { key: "heartRateMin", label: "FC mínima (bpm)" },

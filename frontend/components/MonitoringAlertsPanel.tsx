@@ -63,7 +63,7 @@ export default function MonitoringAlertsPanel({ alerts, profile, acknowledgedKey
         </div>
       ) : (
         <p className="mt-4 rounded-lg border border-dashed p-6 text-center text-xs" style={{ borderColor: "var(--border)", color: "var(--muted-foreground)" }}>
-          Os alertas simulados ativos aparecerão aqui assim que o monitoramento for aberto. Os dados desta área são demonstrativos.
+          Os alertas aparecerão quando o fluxo de sinais vitais receber medições fora dos limites configurados.
         </p>
       )}
     </section>

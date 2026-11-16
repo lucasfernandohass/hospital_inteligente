@@ -218,7 +218,7 @@ export default function DashboardSidebar({
       <button
         type="button"
         onClick={() => {
-          logActivity(role, "Sessão encerrada", "Acesso demonstrativo", name)
+          logActivity(role, "Sessão encerrada", "Acesso ao sistema", name)
           onLogout()
         }}
         className="mt-1 flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-medium transition-colors hover:bg-white/5"

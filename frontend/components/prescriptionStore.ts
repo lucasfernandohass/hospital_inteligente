@@ -14,7 +14,7 @@ export interface SharedPrescription {
   pacienteId: string
   data: string
   medico: string
+  medicoId?: string
   item: SharedPrescriptionItem
 }
 
-export const PRESCRIPTION_STORAGE_KEY = "inteliHosp-prescricoes-demonstrativas"

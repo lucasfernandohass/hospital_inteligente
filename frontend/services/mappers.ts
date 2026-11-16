@@ -1,8 +1,9 @@
-import type { AppointmentDto, BedDto, InternmentDto, MedicationDto, PatientDto, PrescriptionDto, PrescriptionItemDto } from "./api"
+import type { AppointmentDto, AttendanceDto, BedDto, ClinicalRecordDto, InternmentDto, MedicationDto, PatientDto, PrescriptionDto, PrescriptionItemDto } from "./api"
 import type { RegisteredBed, RegisteredPatient } from "../components/patientStore"
 import type { Hospitalization } from "../components/hospitalizationStore"
 import type { ReceptionAppointment } from "../components/appointmentStore"
 import type { SharedPrescription } from "../components/prescriptionStore"
+import type { ClinicalEvolutionMap } from "../components/clinicalEvolutionStore"
 
 export function formatCpf(cpf: string) {
   const digits = cpf.replace(/\D/g, "")
@@ -68,6 +69,7 @@ export function mapPrescriptions(prescriptions: PrescriptionDto[], items: Prescr
       return {
         id: String(prescription.id), pacienteId: String(prescription.pacienteId),
         data: prescription.data.slice(0, 10).split("-").reverse().join("/"),
+        medicoId: String(prescription.medicoId),
         medico: doctors.find((doctor) => doctor.id === prescription.medicoId)?.nome ?? `Médico ${prescription.medicoId}`,
         item: {
           id: String(item.id), medicamento: medication?.nome ?? `Medicamento ${item.medicamentoId}`,
@@ -76,4 +78,49 @@ export function mapPrescriptions(prescriptions: PrescriptionDto[], items: Prescr
         },
       }
     }))
+}
+
+export function mapClinicalEvolutions(
+  attendances: AttendanceDto[],
+  records: ClinicalRecordDto[],
+  doctors: { id: number; nome: string }[],
+  currentUser?: { id: number; nome: string },
+): ClinicalEvolutionMap {
+  const attendanceById = new Map(attendances.map((attendance) => [attendance.id, attendance]))
+  const entries: { patientId: string; timestamp: number; evolution: ClinicalEvolutionMap[string][number] }[] = []
+
+  for (const attendance of attendances) {
+    if (attendance.tipo !== "EVOLUCAO_ENFERMAGEM") continue
+    entries.push({
+      patientId: String(attendance.pacienteId),
+      timestamp: new Date(attendance.data).getTime(),
+      evolution: {
+        data: new Date(attendance.data).toLocaleString("pt-BR"),
+        descricao: attendance.descricao,
+        perfil: "Enfermagem",
+        profissional: currentUser?.id === attendance.funcionarioResponsavelId ? currentUser.nome : "Equipe de enfermagem",
+      },
+    })
+  }
+
+  for (const record of records) {
+    const attendance = attendanceById.get(record.atendimentoId)
+    if (!attendance) continue
+    entries.push({
+      patientId: String(attendance.pacienteId),
+      timestamp: new Date(record.data).getTime(),
+      evolution: {
+        data: new Date(record.data).toLocaleString("pt-BR"),
+        descricao: record.descricao,
+        perfil: "Médico",
+        profissional: doctors.find((doctor) => doctor.id === record.medicoId)?.nome ?? `Médico ${record.medicoId}`,
+      },
+    })
+  }
+
+  entries.sort((left, right) => right.timestamp - left.timestamp)
+  return entries.reduce<ClinicalEvolutionMap>((result, entry) => {
+    result[entry.patientId] = [...(result[entry.patientId] ?? []), entry.evolution]
+    return result
+  }, {})
 }
