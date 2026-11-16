@@ -1,6 +1,7 @@
 package br.com.unicesumar.hospital_api.services;
 
 import br.com.unicesumar.hospital_api.dtos.request.CriarFuncionarioRequest;
+import br.com.unicesumar.hospital_api.dtos.request.AtualizarFuncionarioRequest;
 import br.com.unicesumar.hospital_api.dtos.response.FuncionarioResponseDTO;
 import br.com.unicesumar.hospital_api.exception.BusinessException;
 import br.com.unicesumar.hospital_api.exception.DuplicateResourceException;
@@ -26,6 +27,7 @@ public class FuncionarioService {
     }
 
     @Transactional public FuncionarioResponseDTO criar(CriarFuncionarioRequest r) {
+        validarDadosPessoais(r.cpf(), r.dataNascimento());
         if (repository.existsByEmailIgnoreCase(r.email())) throw new DuplicateResourceException("E-mail já cadastrado");
         if (repository.existsByCpf(r.cpf())) throw new DuplicateResourceException("CPF já cadastrado");
         if (repository.existsByMatricula(r.matricula())) throw new DuplicateResourceException("Matrícula já cadastrada");
@@ -45,17 +47,18 @@ public class FuncionarioService {
         return paraResponse(repository.save(funcionario));
     }
 
-    @Transactional public FuncionarioResponseDTO atualizar(Long id, CriarFuncionarioRequest r) {
+    @Transactional public FuncionarioResponseDTO atualizar(Long id, AtualizarFuncionarioRequest r) {
+        validarDadosPessoais(r.cpf(), r.dataNascimento());
         Funcionario funcionario = repository.findById(id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Funcionário não encontrado"));
         if (funcionario.getRole() != r.role()) throw new BusinessException("A role de um funcionário não pode ser alterada por este endpoint");
-        validarDadosDaRole(r);
+        validarDadosDaRole(r.role(), r.crm(), r.especialidade(), r.coren(), r.setor());
         if (repository.existsByEmailIgnoreCase(r.email()) && !funcionario.getEmail().equalsIgnoreCase(r.email())) throw new DuplicateResourceException("E-mail já cadastrado");
         if (repository.existsByCpf(r.cpf()) && !funcionario.getCpf().equals(r.cpf())) throw new DuplicateResourceException("CPF já cadastrado");
         if (repository.existsByMatricula(r.matricula()) && !funcionario.getMatricula().equals(r.matricula())) throw new DuplicateResourceException("Matrícula já cadastrada");
         funcionario.setNome(r.nome().trim()); funcionario.setCpf(r.cpf()); funcionario.setDataNascimento(r.dataNascimento());
         funcionario.setTelefone(r.telefone()); funcionario.setEndereco(r.endereco()); funcionario.setMatricula(r.matricula());
         funcionario.setCargo(r.role().name()); funcionario.setDataAdmissao(r.dataAdmissao()); funcionario.setEmail(r.email().trim().toLowerCase());
-        funcionario.setSenha(encoder.encode(r.senha()));
+        if (!vazio(r.senha())) funcionario.setSenha(encoder.encode(r.senha()));
         if (funcionario instanceof Medico m) { m.setCrm(r.crm()); m.setEspecialidade(r.especialidade()); }
         if (funcionario instanceof Enfermeira e) { e.setCoren(r.coren()); e.setSetor(r.setor()); }
         if (funcionario instanceof Recepcionista receptionist) receptionist.setSetor(r.setor());
@@ -75,12 +78,32 @@ public class FuncionarioService {
                 f.getMatricula(), f.getCargo(), f.getDataAdmissao(), f.getEmail(), f.getRole(), crm, especialidade, coren, setor);
     }
     private void validarDadosDaRole(CriarFuncionarioRequest r) {
-        if (r.role() == Role.MEDICO && (vazio(r.crm()) || vazio(r.especialidade())))
+        validarDadosDaRole(r.role(), r.crm(), r.especialidade(), r.coren(), r.setor());
+    }
+    private void validarDadosDaRole(Role role, String crm, String especialidade, String coren, String setor) {
+        if (role == Role.MEDICO && (vazio(crm) || vazio(especialidade)))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CRM e especialidade são obrigatórios para médico");
-        if (r.role() == Role.ENFERMEIRA && (vazio(r.coren()) || vazio(r.setor())))
+        if (role == Role.ENFERMEIRA && (vazio(coren) || vazio(setor)))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "COREN e setor são obrigatórios para enfermeira");
-        if (r.role() == Role.RECEPCIONISTA && vazio(r.setor()))
+        if (role == Role.RECEPCIONISTA && vazio(setor))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Setor é obrigatório para recepcionista");
+    }
+    private void validarDadosPessoais(String cpf, java.time.LocalDate dataNascimento) {
+        if (!cpfValido(cpf)) throw new BusinessException("CPF inválido");
+        if (dataNascimento == null || dataNascimento.plusYears(18).isAfter(java.time.LocalDate.now()))
+            throw new BusinessException("O funcionário deve ter 18 anos ou mais");
+    }
+    private boolean cpfValido(String cpf) {
+        if (cpf == null || !cpf.matches("\\d{11}") || cpf.matches("(\\d)\\1{10}")) return false;
+        int primeiro = calcularDigitoCpf(cpf, 9);
+        int segundo = calcularDigitoCpf(cpf, 10);
+        return primeiro == Character.digit(cpf.charAt(9), 10) && segundo == Character.digit(cpf.charAt(10), 10);
+    }
+    private int calcularDigitoCpf(String cpf, int quantidade) {
+        int soma = 0;
+        for (int i = 0; i < quantidade; i++) soma += Character.digit(cpf.charAt(i), 10) * (quantidade + 1 - i);
+        int digito = (soma * 10) % 11;
+        return digito == 10 ? 0 : digito;
     }
     private boolean vazio(String valor) { return valor == null || valor.isBlank(); }
 }

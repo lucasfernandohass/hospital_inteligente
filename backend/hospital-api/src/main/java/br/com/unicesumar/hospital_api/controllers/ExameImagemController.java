@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/exames-imagem")
-@PreAuthorize("hasAnyRole('ADMINISTRADOR','MEDICO')")
+@PreAuthorize("hasAnyRole('ADMINISTRADOR','MEDICO','RECEPCIONISTA','ENFERMEIRA')")
 public class ExameImagemController extends AbstractDomainController<DomainRequestDTOs.ExameImagem, DomainResponseDTOs.ExameImagem> {
     public ExameImagemController(ExameImagemService service) { super(service); }
 }

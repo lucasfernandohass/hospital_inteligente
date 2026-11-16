@@ -1,5 +1,6 @@
 package br.com.unicesumar.hospital_api.models;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -18,6 +19,7 @@ public class ItemPrescricao {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "prescricao_id", nullable = false)
+    @JsonIgnore
     private Prescricao prescricao;
 
     @Column(name = "medicamento_id", nullable = false)
