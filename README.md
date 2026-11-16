@@ -97,9 +97,40 @@ Hospital-Inteligente/
 ├── docs/               # Documentos, diagramas e materiais do projeto
 ├── frontend/           # Aplicação React
 │   └── README.md       # Execução e detalhes da interface
+├── simulador-laravel/  # Simulador de sinais vitais
+│   └── README.md       # Configuração e API do simulador
 ├── docker-compose.yml  # PostgreSQL para desenvolvimento local
+├── dev.sh              # Sobe o ambiente local completo
 └── README.md
 ```
+
+## Executar localmente
+
+O script `dev.sh` sobe todo o ambiente com um único comando:
+
+```bash
+./dev.sh
+```
+
+Ele executa, em ordem:
+
+1. **PostgreSQL** via `docker compose`, aguardando o banco ficar pronto;
+2. **Backend** Spring Boot na porta `8080`, aguardando o `/actuator/health` responder;
+3. **Simulador** Laravel: a API (`php artisan serve`, porta `8000`) e o scheduler (`php artisan schedule:work`), que é quem envia os sinais vitais;
+4. **Frontend** Vite na porta `8443`, usando Node 22 via `nvm` e executando `npm install` se necessário.
+
+Os logs de todos os serviços aparecem no mesmo terminal, identificados por `[back]`, `[sim]`, `[sched]` e `[front]`. **Ctrl+C encerra todos os serviços**; o PostgreSQL continua em execução no Docker.
+
+Requisitos: Docker, Java 21, PHP 8.2+ com as dependências do Composer instaladas em `simulador-laravel/` e Node 20.19+ ou 22.12+ (o `nvm` é usado automaticamente se estiver instalado). O arquivo `simulador-laravel/.env` deve estar configurado conforme o README do simulador.
+
+Observações:
+
+- A `MONITOR_API_KEY` do backend é lida do `.env` do simulador, garantindo que as chaves sejam iguais. Para usar outra, exporte a variável antes: `MONITOR_API_KEY=minha-chave ./dev.sh`;
+- Se alguma das portas `8080`, `8000` ou `8443` já estiver em uso, o script avisa e não inicia nada;
+- Se a simulação estiver pausada, o script exibe o comando para retomá-la (`POST /api/simulacao/iniciar`);
+- Para usar outra versão do Node: `NODE_VERSION=20 ./dev.sh`.
+
+Para executar cada serviço separadamente, consulte os READMEs de `backend/`, `frontend/` e `simulador-laravel/`.
 
 ## Tecnologias
 
