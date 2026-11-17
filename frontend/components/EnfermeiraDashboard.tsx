@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import type { Screen } from "../App"
 import DashboardSidebar from "./DashboardSidebar"
 import { Avatar, ShowMoreButton, summaryLimit, DashboardHeader, EmptyState, HeroHeader, HeroStat, MetaItem, PageTitle, ProgressBar, QuickAction, SectionCard, SectionContext, StatusBadge, TimelineItem, UiIcon, VitalTile, shiftLabel, toneStyles, type Tone } from "./ui"
@@ -10,17 +10,14 @@ import ActivityLog from "./ActivityLog"
 import AlertNotifications from "./AlertNotifications"
 import type { MonitoringAlert } from "./VitalMonitoring"
 import { logActivity } from "./activityStore"
-import { CLINICAL_ALERT_ACK_STORAGE_KEY, clinicalAlertRecords, readLegacyClinicalAlertAcknowledgements } from "./clinicalAlertStore"
-import { CLINICAL_EVOLUTION_STORAGE_KEY, mergeClinicalEvolutions, readLegacyClinicalEvolutions, type ClinicalEvolutionMap } from "./clinicalEvolutionStore"
-import { PRESCRIPTION_STORAGE_KEY, type SharedPrescription } from "./prescriptionStore"
-import { MEDICATION_ADMINISTRATION_STORAGE_KEY, readMedicationAdministrations } from "./medicationAdministrationStore"
-import { HOSPITALIZATION_STORAGE_KEY, type Hospitalization } from "./hospitalizationStore"
-import useLocalStorageState from "./useLocalStorageState"
+import type { ClinicalEvolutionMap } from "./clinicalEvolutionStore"
+import type { SharedPrescription } from "./prescriptionStore"
+import type { Hospitalization } from "./hospitalizationStore"
 import { formatLongLocalDate } from "./appointmentStore"
-import { BED_STORAGE_KEY, initialRegisteredBeds, initialRegisteredPatients, normalizeRegisteredBeds, PATIENT_STORAGE_KEY, type RegisteredBed, type RegisteredPatient } from "./patientStore"
+import { type RegisteredBed, type RegisteredPatient } from "./patientStore"
 import { usePanelRoute } from "../hooks/usePanelRoute"
 import { api, ApiError } from "../services/api"
-import { mapBed, mapInternment, mapPatient } from "../services/mappers"
+import { formatBedNumber, mapBed, mapClinicalEvolutions, mapInternment, mapPatient } from "../services/mappers"
 import { mapPrescriptions } from "../services/mappers"
 import { useVitalFeed } from "../hooks/useVitalFeed"
 
@@ -36,446 +33,20 @@ interface Props {
 type Tab = "internados" | "monitoramento" | "prescricao" | "administracao" | "evolucao" | "atividades" | "alertas"
 
 
-// ---------------------------------------------------------------------------
-// Perfil fixo da enfermeira responsável
-// ---------------------------------------------------------------------------
-const ENFERMEIRA = {
-  cargo: "Enfermagem",
-}
-
-// ---------------------------------------------------------------------------
-// Pacientes internados — nomes brasileiros realistas
-// ---------------------------------------------------------------------------
-const pacientesBase = [
-  {
-    id: "PAC-001",
-    nome: "João Batista Ferreira",
-    idade: 68,
-    sexo: "M",
-    condicao: "Hipertensão Arterial Sistêmica",
-    status: "estável",
-    avatar: "JF",
-    leito: "12A",
-    ala: "Clínica Médica",
-    risco: "low",
-    prescricaoAtiva: true,
-    medico: "Dr. Rafael Oliveira",
-    entrada: "10 Set 2026",
-  },
-  {
-    id: "PAC-002",
-    nome: "Marta Regina Souza",
-    idade: 62,
-    sexo: "F",
-    condicao: "Diabetes Mellitus Tipo 2",
-    status: "atenção",
-    avatar: "MS",
-    leito: "08B",
-    ala: "Endocrinologia",
-    risco: "medium",
-    prescricaoAtiva: true,
-    medico: "Dr. Rafael Oliveira",
-    entrada: "12 Set 2026",
-  },
-  {
-    id: "PAC-003",
-    nome: "Antônio Carlos Mendes",
-    idade: 54,
-    sexo: "M",
-    condicao: "Pneumonia Bacteriana",
-    status: "crítico",
-    avatar: "AM",
-    leito: "14B",
-    ala: "Pneumologia",
-    risco: "high",
-    prescricaoAtiva: true,
-    medico: "Dra. Fernanda Lima",
-    entrada: "14 Set 2026",
-  },
-  {
-    id: "PAC-004",
-    nome: "Larissa Andrade Pinto",
-    idade: 31,
-    sexo: "F",
-    condicao: "Enxaqueca Crônica",
-    status: "estável",
-    avatar: "LP",
-    leito: "05A",
-    ala: "Clínica Médica",
-    risco: "low",
-    prescricaoAtiva: false,
-    medico: "Dr. Rafael Oliveira",
-    entrada: "13 Set 2026",
-  },
-  {
-    id: "PAC-005",
-    nome: "Roberto Nogueira Alves",
-    idade: 71,
-    sexo: "M",
-    condicao: "Insuficiência Cardíaca Congestiva",
-    status: "atenção",
-    avatar: "RA",
-    leito: "22A",
-    ala: "Cardiologia",
-    risco: "medium",
-    prescricaoAtiva: true,
-    medico: "Dr. Rafael Oliveira",
-    entrada: "11 Set 2026",
-  },
-  {
-    id: "PAC-006",
-    nome: "Cláudia Ribeiro Martins",
-    idade: 45,
-    sexo: "F",
-    condicao: "Pós-operatório de Colecistectomia",
-    status: "estável",
-    avatar: "CM",
-    leito: "09C",
-    ala: "Cirurgia Geral",
-    risco: "low",
-    prescricaoAtiva: true,
-    medico: "Dr. Bruno Tavares",
-    entrada: "14 Set 2026",
-  },
-  {
-    id: "PAC-007",
-    nome: "Sebastião Rocha Lima",
-    idade: 79,
-    sexo: "M",
-    condicao: "Acidente Vascular Cerebral Isquêmico",
-    status: "atenção",
-    avatar: "SL",
-    leito: "17A",
-    ala: "Neurologia",
-    risco: "medium",
-    prescricaoAtiva: true,
-    medico: "Dra. Fernanda Lima",
-    entrada: "09 Set 2026",
-  },
-  {
-    id: "PAC-008",
-    nome: "Patrícia Gomes Barbosa",
-    idade: 38,
-    sexo: "F",
-    condicao: "Pielonefrite Aguda",
-    status: "atenção",
-    avatar: "PB",
-    leito: "11B",
-    ala: "Nefrologia",
-    risco: "medium",
-    prescricaoAtiva: true,
-    medico: "Dr. Bruno Tavares",
-    entrada: "13 Set 2026",
-  },
-]
-
-// ---------------------------------------------------------------------------
-// Registros clínicos iniciais
-// ---------------------------------------------------------------------------
-const registrosClinicosIniciais: Record<string, {
-  data: string
-  descricao: string
-  pressao: string
-  fc: number
-  temp: number
-  spo2: number
-}[]> = {
-  "PAC-001": [
-    {
-      data: "Hoje, 08:00",
-      descricao:
-        "Paciente estável, PA controlada com medicação. Sem queixas álgicas.",
-      pressao: "128/82",
-      fc: 74,
-      temp: 36.8,
-      spo2: 98,
-    },
-  ],
-  "PAC-002": [
-    {
-      data: "Hoje, 08:30",
-      descricao:
-        "Glicemia capilar 210 mg/dL. Comunicado ao médico para ajuste de insulina.",
-      pressao: "142/90",
-      fc: 82,
-      temp: 37.0,
-      spo2: 96,
-    },
-  ],
-  "PAC-003": [
-    {
-      data: "Hoje, 07:45",
-      descricao:
-        "SpO₂ 88% em ar ambiente. Iniciado O₂ suplementar 3L/min. Médico notificado.",
-      pressao: "110/70",
-      fc: 108,
-      temp: 38.9,
-      spo2: 88,
-    },
-  ],
-  "PAC-004": [
-    {
-      data: "Hoje, 09:00",
-      descricao:
-        "Refere melhora da cefaleia após analgesia. Sem novos episódios.",
-      pressao: "118/76",
-      fc: 70,
-      temp: 36.5,
-      spo2: 99,
-    },
-  ],
-  "PAC-005": [
-    {
-      data: "Hoje, 07:30",
-      descricao:
-        "Edema de MMII +/4+. PA elevada. Comunicado ao médico plantonista.",
-      pressao: "165/105",
-      fc: 96,
-      temp: 37.2,
-      spo2: 93,
-    },
-  ],
-  "PAC-006": [
-    {
-      data: "Hoje, 08:15",
-      descricao:
-        "Pós-operatório imediato. Ferida operatória limpa, sem sinais de infecção.",
-      pressao: "122/80",
-      fc: 78,
-      temp: 36.7,
-      spo2: 98,
-    },
-  ],
-  "PAC-007": [
-    {
-      data: "Hoje, 07:50",
-      descricao:
-        "Déficit motor em dimídio direito. Fisioterapia acionada. Estável hemodinamicamente.",
-      pressao: "148/92",
-      fc: 84,
-      temp: 36.6,
-      spo2: 97,
-    },
-  ],
-  "PAC-008": [
-    {
-      data: "Hoje, 08:40",
-      descricao:
-        "Dor lombar intensa. Analgesia administrada. Aguardando resultado de urocultura.",
-      pressao: "130/85",
-      fc: 88,
-      temp: 38.2,
-      spo2: 97,
-    },
-  ],
-}
-
 type PrescricaoItem = {
   id: string
   medicamento: string
   dosagem: string
   via: string
   horario: string
-  status: "pendente" | "administrado" | "atrasado"
-}
-
-const prescricoesPorPaciente: Record<string, PrescricaoItem[]> = {
-  "PAC-001": [
-    {
-      id: "IP-001",
-      medicamento: "Losartana",
-      dosagem: "50mg",
-      via: "Oral",
-      horario: "08:00",
-      status: "pendente",
-    },
-    {
-      id: "IP-002",
-      medicamento: "Amlodipina",
-      dosagem: "5mg",
-      via: "Oral",
-      horario: "12:00",
-      status: "pendente",
-    },
-    {
-      id: "IP-003",
-      medicamento: "AAS",
-      dosagem: "100mg",
-      via: "Oral",
-      horario: "20:00",
-      status: "pendente",
-    },
-  ],
-  "PAC-002": [
-    {
-      id: "IP-004",
-      medicamento: "Insulina NPH",
-      dosagem: "20UI",
-      via: "SC",
-      horario: "07:00",
-      status: "pendente",
-    },
-    {
-      id: "IP-005",
-      medicamento: "Metformina",
-      dosagem: "850mg",
-      via: "Oral",
-      horario: "12:00",
-      status: "pendente",
-    },
-    {
-      id: "IP-006",
-      medicamento: "Insulina NPH",
-      dosagem: "20UI",
-      via: "SC",
-      horario: "19:00",
-      status: "pendente",
-    },
-  ],
-  "PAC-003": [
-    {
-      id: "IP-007",
-      medicamento: "Amoxicilina",
-      dosagem: "500mg",
-      via: "IV",
-      horario: "06:00",
-      status: "pendente",
-    },
-    {
-      id: "IP-008",
-      medicamento: "Amoxicilina",
-      dosagem: "500mg",
-      via: "IV",
-      horario: "14:00",
-      status: "pendente",
-    },
-    {
-      id: "IP-009",
-      medicamento: "Dexametasona",
-      dosagem: "4mg",
-      via: "IV",
-      horario: "10:00",
-      status: "pendente",
-    },
-    {
-      id: "IP-010",
-      medicamento: "Amoxicilina",
-      dosagem: "500mg",
-      via: "IV",
-      horario: "22:00",
-      status: "pendente",
-    },
-  ],
-  "PAC-005": [
-    {
-      id: "IP-011",
-      medicamento: "Furosemida",
-      dosagem: "40mg",
-      via: "IV",
-      horario: "08:00",
-      status: "pendente",
-    },
-    {
-      id: "IP-012",
-      medicamento: "Espironolactona",
-      dosagem: "25mg",
-      via: "Oral",
-      horario: "12:00",
-      status: "pendente",
-    },
-    {
-      id: "IP-013",
-      medicamento: "Carvedilol",
-      dosagem: "6,25mg",
-      via: "Oral",
-      horario: "20:00",
-      status: "pendente",
-    },
-  ],
-  "PAC-006": [
-    {
-      id: "IP-014",
-      medicamento: "Dipirona",
-      dosagem: "1g",
-      via: "IV",
-      horario: "06:00",
-      status: "pendente",
-    },
-    {
-      id: "IP-015",
-      medicamento: "Cefazolina",
-      dosagem: "1g",
-      via: "IV",
-      horario: "08:00",
-      status: "pendente",
-    },
-    {
-      id: "IP-016",
-      medicamento: "Ondansetrona",
-      dosagem: "4mg",
-      via: "IV",
-      horario: "14:00",
-      status: "pendente",
-    },
-  ],
-  "PAC-007": [
-    {
-      id: "IP-017",
-      medicamento: "AAS",
-      dosagem: "100mg",
-      via: "Oral",
-      horario: "08:00",
-      status: "pendente",
-    },
-    {
-      id: "IP-018",
-      medicamento: "Atorvastatina",
-      dosagem: "40mg",
-      via: "Oral",
-      horario: "20:00",
-      status: "pendente",
-    },
-    {
-      id: "IP-019",
-      medicamento: "Enoxaparina",
-      dosagem: "40mg",
-      via: "SC",
-      horario: "10:00",
-      status: "pendente",
-    },
-  ],
-  "PAC-008": [
-    {
-      id: "IP-020",
-      medicamento: "Ceftriaxona",
-      dosagem: "1g",
-      via: "IV",
-      horario: "08:00",
-      status: "pendente",
-    },
-    {
-      id: "IP-021",
-      medicamento: "Dipirona",
-      dosagem: "1g",
-      via: "IV",
-      horario: "14:00",
-      status: "pendente",
-    },
-    {
-      id: "IP-022",
-      medicamento: "Hidratação SF 0,9%",
-      dosagem: "500ml",
-      via: "IV",
-      horario: "12:00",
-      status: "pendente",
-    },
-  ],
+  status: 'pendente' | 'administrado' | 'atrasado'
 }
 
 const riskColor = {
   low: { bg: "var(--success-surface)", text: "var(--success-foreground)", dot: "var(--success)", label: "Estável" },
   medium: { bg: "var(--warning-surface)", text: "var(--warning-foreground)", dot: "var(--warning)", label: "Atenção" },
   high: { bg: "var(--danger-surface)", text: "var(--danger-foreground)", dot: "var(--danger)", label: "Crítico" },
+  unknown: { bg: "var(--secondary)", text: "var(--muted-foreground)", dot: "var(--muted-foreground)", label: "Sem leitura" },
 }
 
 const statusPrescricaoColor = {
@@ -511,80 +82,45 @@ export default function NurseDashboard({
   const [registeredBeds, setRegisteredBeds] = useState<RegisteredBed[]>([])
   const [hospitalizations, setHospitalizations] = useState<Hospitalization[]>([])
   const [apiPrescriptions, setApiPrescriptions] = useState<SharedPrescription[]>([])
+  const [evolucoesPorPaciente, setEvolucoesPorPaciente] = useState<ClinicalEvolutionMap>({})
+  const [apiAlerts, setApiAlerts] = useState<Awaited<ReturnType<typeof api.listAlerts>>>([])
   const [dataLoading, setDataLoading] = useState(true)
   const [dataError, setDataError] = useState("")
   useEffect(() => {
     let active = true
     setDataLoading(true)
-    Promise.all([api.listPatients(token), api.listBeds(token), api.listInternments(token), api.listDoctors(token), api.listPrescriptions(token), api.listPrescriptionItems(token), api.listMedications(token), api.listMedicationAdministrations(token)])
-      .then(([patientsDto, bedsDto, internmentsDto, doctors, prescriptions, items, medications, administrations]) => {
+    Promise.all([api.listPatients(token), api.listBeds(token), api.listInternments(token), api.listDoctors(token), api.listPrescriptions(token), api.listPrescriptionItems(token), api.listMedications(token), api.listMedicationAdministrations(token), api.listAttendances(token), api.listClinicalRecords(token), api.listAlerts(token)])
+      .then(([patientsDto, bedsDto, internmentsDto, doctors, prescriptions, items, medications, administrations, attendances, clinicalRecords, alerts]) => {
         if (!active) return
         setRegisteredPatients(patientsDto.map(mapPatient))
         setRegisteredBeds(bedsDto.map((bed) => mapBed(bed, internmentsDto)))
         setHospitalizations(internmentsDto.map((item) => mapInternment(item, bedsDto, doctors)))
         setApiPrescriptions(mapPrescriptions(prescriptions, items, medications, doctors))
         setAdministrados(administrations.map((item) => String(item.itemPrescricaoId)))
+        setEvolucoesPorPaciente(mapClinicalEvolutions(attendances, clinicalRecords, doctors, { id: userId, nome: userName }))
+        setApiAlerts(alerts)
         setDataError("")
       })
       .catch((error) => { if (active) setDataError(error instanceof ApiError ? error.message : "Não foi possível carregar dados da API.") })
       .finally(() => { if (active) setDataLoading(false) })
     return () => { active = false }
-  }, [token])
-  const pacientes = useMemo(() => {
-    const knownIds = new Set(pacientesBase.map((patient) => patient.id))
-    const occupiedBeds = registeredBeds.filter((bed) => bed.status === "Ocupado" && bed.pacienteId)
-    const activePatientIds = new Set(
-      occupiedBeds.map((bed) => bed.pacienteId),
-    )
-    const synchronizedBase = pacientesBase.filter((patient) => activePatientIds.has(patient.id)).map((patient) => {
-      const registered = registeredPatients.find((item) => item.id === patient.id)
-      const bed = occupiedBeds.find((item) => item.pacienteId === patient.id)
-      const admission = hospitalizations.find((item) => item.pacienteId === patient.id && item.status === "Ativa")
-      const parts = registered?.dataNasc.split("/").map(Number) ?? []
-      const birthDate = new Date(parts[2] ?? 2000, (parts[1] ?? 1) - 1, parts[0] ?? 1)
-      const today = new Date()
-      const age = Math.max(0, today.getFullYear() - birthDate.getFullYear() - (today < new Date(today.getFullYear(), birthDate.getMonth(), birthDate.getDate()) ? 1 : 0))
-      const name = registered?.nome ?? patient.nome
-      return {
-        ...patient,
-        nome: name,
-        idade: registered ? age : patient.idade,
-        sexo: registered?.sexo ?? patient.sexo,
-        avatar: name.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase(),
-        leito: bed?.numero ?? patient.leito,
-        ala: bed?.setor ?? bed?.tipo ?? patient.ala,
-        condicao: admission?.motivo ?? patient.condicao,
-        medico: admission?.medico ?? patient.medico,
-        entrada: admission?.dataEntrada ?? patient.entrada,
-      }
-    })
-    const additions = registeredPatients
-      .filter((patient) => !knownIds.has(patient.id) && activePatientIds.has(patient.id))
-      .map((patient) => {
-        const bed = registeredBeds.find((item) => item.pacienteId === patient.id && item.status === "Ocupado")
-        const admission = hospitalizations.find((item) => item.pacienteId === patient.id && item.status === "Ativa")
-        const parts = patient.dataNasc.split("/").map(Number)
-        const birthDate = new Date(parts[2] ?? 2000, (parts[1] ?? 1) - 1, parts[0] ?? 1)
-        const today = new Date()
-        const idade = Math.max(0, today.getFullYear() - birthDate.getFullYear() - (today < new Date(today.getFullYear(), birthDate.getMonth(), birthDate.getDate()) ? 1 : 0))
-        return {
-          id: patient.id,
-          nome: patient.nome,
-          idade,
-          sexo: patient.sexo,
-          condicao: admission?.motivo ?? "Aguardando avaliação",
-          status: "estável",
-          avatar: patient.nome.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase(),
-          leito: bed?.numero ?? "—",
-          ala: bed?.setor ?? bed?.tipo ?? "Setor a definir",
-          risco: "low",
-          prescricaoAtiva: false,
-          medico: admission?.medico ?? "Equipe médica",
-          entrada: admission?.dataEntrada ?? "Hoje",
-        }
-      })
-    return [...synchronizedBase, ...additions]
-  }, [hospitalizations, registeredBeds, registeredPatients])
+  }, [token, userName, userId])
+  const pacientes = useMemo(() => hospitalizations.filter((admission) => admission.status === "Ativa").flatMap((admission) => {
+    const registered = registeredPatients.find((patient) => patient.id === admission.pacienteId)
+    if (!registered) return []
+    const bed = registeredBeds.find((item) => item.id === admission.leitoId)
+    const [day, month, year] = registered.dataNasc.split("/").map(Number)
+    const birthDate = new Date(year, month - 1, day)
+    const today = new Date()
+    const idade = Math.max(0, today.getFullYear() - birthDate.getFullYear() - (today < new Date(today.getFullYear(), birthDate.getMonth(), birthDate.getDate()) ? 1 : 0))
+    return [{
+      id: registered.id, nome: registered.nome, idade, sexo: registered.sexo,
+      condicao: admission.motivo, status: "sem avaliação", avatar: registered.nome.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase(),
+      leito: bed ? formatBedNumber(bed) : admission.leito, ala: bed?.setor ?? bed?.tipo ?? admission.setor,
+      risco: "unknown", prescricaoAtiva: apiPrescriptions.some((item) => item.pacienteId === registered.id),
+      medico: admission.medico, entrada: admission.dataEntrada,
+    }]
+  }), [apiPrescriptions, hospitalizations, registeredBeds, registeredPatients])
   const monitorPatients = useMemo(() => pacientes.map((patient) => ({
     id: patient.id, name: patient.nome, bed: patient.leito, sector: patient.ala, condition: patient.condicao,
   })), [pacientes])
@@ -595,50 +131,81 @@ export default function NurseDashboard({
   useEffect(() => {
     setSelectedPaciente((current) => current ? pacientes.find((patient) => patient.id === current.id) ?? pacientes[0] ?? null : null)
   }, [pacientes])
-  const [alertasReconhecidos, setAlertasReconhecidos] = useLocalStorageState<string[]>(CLINICAL_ALERT_ACK_STORAGE_KEY, readLegacyClinicalAlertAcknowledgements)
-  const [monitoringAlerts, setMonitoringAlerts] = useLocalStorageState<MonitoringAlert[]>("inteliHosp-enfermagem-monitoramento-alertas", [])
-  const [monitoringAcknowledged, setMonitoringAcknowledged] = useLocalStorageState<string[]>("inteliHosp-monitoramento-reconhecidos", [])
+  const [monitoringAlerts, setMonitoringAlerts] = useState<MonitoringAlert[]>([])
+  const [monitoringAcknowledged, setMonitoringAcknowledged] = useState<string[]>([])
   const monitoringPendingCount = monitoringAlerts.filter((alert) => !monitoringAcknowledged.includes(alert.key)).length
   const getPatientRisk = (patient: typeof pacientes[number]) => {
     const alerts = monitoringAlerts.filter((alert) => alert.patientId === patient.id)
     if (alerts.some((alert) => alert.severity === "Crítico")) return "high"
     if (alerts.some((alert) => alert.severity === "Moderado")) return patient.risco === "high" ? "high" : "medium"
     if (alerts.some((alert) => alert.severity === "Informativo")) return patient.risco === "low" ? "medium" : patient.risco
-    return patient.risco
+    const reading = liveVitals[patient.id]
+    if (!reading || [reading.heartRate, reading.temperature, reading.oxygen, reading.systolic].every((value) => value === undefined)) return "unknown"
+    if ((reading.oxygen !== undefined && reading.oxygen < 90) || (reading.heartRate !== undefined && (reading.heartRate > 120 || reading.heartRate < 45)) || (reading.temperature !== undefined && reading.temperature >= 39) || (reading.systolic !== undefined && reading.systolic >= 180)) return "high"
+    if ((reading.oxygen !== undefined && reading.oxygen < 94) || (reading.heartRate !== undefined && (reading.heartRate > 100 || reading.heartRate < 55)) || (reading.temperature !== undefined && reading.temperature >= 38) || (reading.systolic !== undefined && reading.systolic >= 140)) return "medium"
+    return "low"
   }
   const [patientSearch, setPatientSearch] = useState("")
   const [administrados, setAdministrados] = useState<string[]>([])
-  const [prescricoesCompartilhadas] = useLocalStorageState<SharedPrescription[]>(PRESCRIPTION_STORAGE_KEY, [])
+  const [confirmacaoAdministracao, setConfirmacaoAdministracao] = useState<PrescricaoItem | null>(null)
+  const confirmDialogRef = useRef<HTMLDivElement>(null)
+  const cancelConfirmationRef = useRef<HTMLButtonElement>(null)
+  const returnFocusRef = useRef<HTMLElement | null>(null)
+  useEffect(() => {
+    if (!confirmacaoAdministracao) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    cancelConfirmationRef.current?.focus()
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault()
+        setConfirmacaoAdministracao(null)
+        return
+      }
+      if (event.key !== "Tab") return
+      const buttons = [...(confirmDialogRef.current?.querySelectorAll<HTMLButtonElement>("button:not([disabled])") ?? [])]
+      const first = buttons[0]
+      const last = buttons[buttons.length - 1]
+      if (!first || !last) return
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      document.removeEventListener("keydown", handleKeyDown)
+      returnFocusRef.current?.focus()
+      returnFocusRef.current = null
+    }
+  }, [confirmacaoAdministracao])
   const [evolucaoTexto, setEvolucaoTexto] = useState("")
   const [evolucaoEnviada, setEvolucaoEnviada] = useState(false)
   // Listas resumidas no celular (central do plantão)
   const [listasExpandidas, setListasExpandidas] = useState<Record<string, boolean>>({})
   const alternarLista = (key: string) => setListasExpandidas((current) => ({ ...current, [key]: !current[key] }))
 
-  const [evolucoesPorPaciente, setEvolucoesPorPaciente] =
-    useLocalStorageState<ClinicalEvolutionMap>(CLINICAL_EVOLUTION_STORAGE_KEY, () => readLegacyClinicalEvolutions(registrosClinicosIniciais))
-  useEffect(() => setEvolucoesPorPaciente((current) => mergeClinicalEvolutions(current, registrosClinicosIniciais)), [setEvolucoesPorPaciente])
-
   const prescricoesEquipe = useMemo(() => {
-    const result: Record<string, PrescricaoItem[]> = Object.fromEntries(
-      Object.entries(prescricoesPorPaciente).map(([patientId, items]) => [patientId, [...items]]),
-    )
-    for (const prescription of prescricoesCompartilhadas) {
-      const item: PrescricaoItem = { ...prescription.item, status: "pendente" }
-      result[prescription.pacienteId] = [item, ...(result[prescription.pacienteId] ?? [])]
-    }
+    const result: Record<string, PrescricaoItem[]> = {}
     for (const prescription of apiPrescriptions) {
-      const item: PrescricaoItem = { ...prescription.item, status: "pendente" }
+      const item: PrescricaoItem = { ...prescription.item, status: administrados.includes(prescription.item.id) ? "administrado" : "pendente" }
       result[prescription.pacienteId] = [item, ...(result[prescription.pacienteId] ?? [])]
     }
     return result
-  }, [apiPrescriptions, prescricoesCompartilhadas])
+  }, [administrados, apiPrescriptions])
 
   const agora = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" }).format(new Date())
 
-  const alertas = clinicalAlertRecords
-  const alertasAtivos = alertas.filter((alert) => pacientes.some((patient) => patient.id === alert.pacienteId))
-  const alertasPendentes = alertasAtivos.filter((alert) => !alertasReconhecidos.includes(alert.id))
+  const alertasAtivos = apiAlerts.filter((alert) => alert.ativo && pacientes.some((patient) => patient.id === String(alert.pacienteId))).map((alert) => {
+    const patient = pacientes.find((item) => item.id === String(alert.pacienteId))
+    const date = new Date(alert.dataHora)
+    return { id: String(alert.id), pacienteId: String(alert.pacienteId), severity: /crit|alto/i.test(alert.nivel) ? "high" as const : "medium" as const, titulo: alert.tipo, detalhe: alert.mensagem, data: date.toLocaleDateString("pt-BR"), horario: date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }), local: patient ? `Leito ${patient.leito}` : "", valor: alert.mensagem, label: "" }
+  })
+  const alertasPendentes = alertasAtivos
 
   const filteredPatients = useMemo(() => pacientes.filter((p) =>
     `${p.nome} ${p.id} ${p.condicao} ${p.leito}`
@@ -664,16 +231,27 @@ export default function NurseDashboard({
     }
   }
 
-  const markAlertRecognized = (id: string) => {
+  const markAlertRecognized = async (id: string) => {
     logActivity("Enfermagem", "Alerta reconhecido", "Alerta", id)
-    setAlertasReconhecidos((current) =>
-      current.includes(id) ? current : [...current, id],
-    )
+    const current = apiAlerts.find((alert) => String(alert.id) === id)
+    if (!current) return
+    try {
+      const updated = await api.updateAlert(current.id, { ...current, ativo: false }, token)
+      setApiAlerts((items) => items.map((alert) => alert.id === updated.id ? updated : alert))
+    } catch (error) { setDataError(error instanceof ApiError ? error.message : "Não foi possível atualizar o alerta.") }
   }
 
-  const markAllAlertasRecognized = () => {
-    if (alertasPendentes.length) logActivity("Enfermagem", "Alertas reconhecidos", "Central de alertas", `${alertasPendentes.length} alertas`)
-    setAlertasReconhecidos((current) => [...new Set([...current, ...alertasAtivos.map((alert) => alert.id)])])
+  const markAllAlertasRecognized = async () => {
+    if (!alertasPendentes.length) return
+    try {
+      const updates = await Promise.all(alertasPendentes.map((alert) => {
+        const current = apiAlerts.find((item) => String(item.id) === alert.id)
+        return current ? api.updateAlert(current.id, { ...current, ativo: false }, token) : null
+      }))
+      const byId = new Map(updates.filter((item): item is NonNullable<typeof item> => item !== null).map((item) => [item.id, item]))
+      setApiAlerts((items) => items.map((item) => byId.get(item.id) ?? item))
+      logActivity("Enfermagem", "Alertas reconhecidos", "Central de alertas", `${alertasPendentes.length} alertas`)
+    } catch (error) { setDataError(error instanceof ApiError ? error.message : "Não foi possível atualizar os alertas.") }
   }
 
   const confirmarAdministracao = async (itemId: string) => {
@@ -694,29 +272,22 @@ export default function NurseDashboard({
     }
   }
 
-  const enviarEvolucao = () => {
+  const enviarEvolucao = async () => {
     if (!evolucaoTexto.trim() || !selectedPaciente) return
-
-    const now = new Date()
-    const novaEvolucao = {
-      data: new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(now),
-      descricao: evolucaoTexto.trim(),
-      perfil: "Enfermagem" as const,
-      profissional: userName,
+    const admission = hospitalizations.find((item) => item.pacienteId === selectedPaciente.id && item.status === "Ativa")
+    if (!admission?.medicoId || !Number.isFinite(Number(admission.medicoId))) {
+      setDataError("Não há médico responsável vinculado à internação para registrar a evolução.")
+      return
     }
-
-    setEvolucoesPorPaciente((current) => ({
-      ...current,
-      [selectedPaciente.id]: [
-        novaEvolucao,
-        ...(current[selectedPaciente.id] ?? []),
-      ],
-    }))
-    logActivity("Enfermagem", "Evolução registrada", "Prontuário demonstrativo", selectedPaciente.id)
-
-    setEvolucaoEnviada(true)
-    setEvolucaoTexto("")
-    setTimeout(() => setEvolucaoEnviada(false), 2500)
+    const now = new Date()
+    const data = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}T${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`
+    try {
+      const saved = await api.createAttendance({ data, tipo: "EVOLUCAO_ENFERMAGEM", descricao: evolucaoTexto.trim(), status: "REGISTRADO", leitoId: Number(admission.leitoId), pacienteId: Number(selectedPaciente.id), funcionarioResponsavelId: userId, medicoResponsavelId: Number(admission.medicoId) }, token)
+      const novaEvolucao = { data: `Hoje, ${new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" }).format(now)}`, descricao: saved.descricao, perfil: "Enfermagem" as const, profissional: userName }
+      setEvolucoesPorPaciente((current) => ({ ...current, [selectedPaciente.id]: [novaEvolucao, ...(current[selectedPaciente.id] ?? [])] }))
+      logActivity("Enfermagem", "Evolução registrada", "Prontuário", selectedPaciente.id)
+      setEvolucaoEnviada(true); setEvolucaoTexto(""); setTimeout(() => setEvolucaoEnviada(false), 2500)
+    } catch (error) { setDataError(error instanceof ApiError ? error.message : "Não foi possível registrar a evolução.") }
   }
 
   // Navegação agrupada por assunto
@@ -732,11 +303,21 @@ export default function NurseDashboard({
   const activeTabInfo = tabs.find((tab) => tab.key === activeTab)
 
   // ---- Apresentação (somente leitura dos dados já calculados acima) ----
-  const riskTone = (risk: string): Tone => (risk === "high" ? "danger" : risk === "medium" ? "warning" : "success")
-  const riskLabel = (risk: string) => riskColor[risk as keyof typeof riskColor]?.label ?? "Estável"
-  const riskIcon = (risk: string) => (risk === "high" ? "alert" : risk === "medium" ? "info" : "checkCircle")
-  const latestVitalsFor = (id: string) =>
-    evolucoesPorPaciente[id]?.find((entry) => entry.fc !== undefined || entry.spo2 !== undefined || entry.pressao !== undefined)
+  const riskTone = (risk: string): Tone => (risk === "high" ? "danger" : risk === "medium" ? "warning" : risk === "low" ? "success" : "neutral")
+  const riskLabel = (risk: string) => riskColor[risk as keyof typeof riskColor]?.label ?? "Sem leitura"
+  const riskIcon = (risk: string) => (risk === "high" ? "alert" : risk === "medium" ? "info" : risk === "low" ? "checkCircle" : "info")
+  const latestVitalsFor = (id: string) => {
+    const saved = evolucoesPorPaciente[id]?.find((entry) => entry.fc !== undefined || entry.temp !== undefined || entry.spo2 !== undefined || entry.pressao !== undefined)
+    const live = liveVitals[id]
+    if (!live || [live.heartRate, live.temperature, live.oxygen, live.systolic, live.diastolic].every((value) => value === undefined)) return saved
+    return {
+      ...saved,
+      fc: live.heartRate ?? saved?.fc,
+      temp: live.temperature ?? saved?.temp,
+      spo2: live.oxygen ?? saved?.spo2,
+      pressao: live.systolic !== undefined && live.diastolic !== undefined ? `${live.systolic}/${live.diastolic}` : saved?.pressao,
+    }
+  }
   const pendingFor = (id: string) => (prescricoesEquipe[id] ?? []).filter((item) => item.status !== "administrado" && !administrados.includes(item.id))
   const doseStatus = (item: PrescricaoItem) => {
     const status = administrados.includes(item.id) ? "administrado" : item.status
@@ -776,9 +357,10 @@ export default function NurseDashboard({
   const limitePacientesCelular = summaryLimit(filteredPatients.length, 3)
   const totalDoses = pacientes.reduce((total, patient) => total + (prescricoesEquipe[patient.id] ?? []).length, 0)
   const dosesConfirmadas = totalDoses - dosesPendentes.length
-  const hojeCurto = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" }).format(new Date())
+  const hojeCompleto = new Intl.DateTimeFormat("pt-BR").format(new Date())
+  const selectedPatientEvolutionCount = selectedPaciente ? (evolucoesPorPaciente[selectedPaciente.id] ?? []).length : 0
   const evoluiuHoje = (id: string) =>
-    (evolucoesPorPaciente[id] ?? []).some((entry) => entry.perfil === "Enfermagem" && (entry.data.startsWith("Hoje") || entry.data.startsWith(hojeCurto)))
+    (evolucoesPorPaciente[id] ?? []).some((entry) => entry.perfil === "Enfermagem" && (entry.data.startsWith("Hoje") || entry.data.startsWith(hojeCompleto)))
   const evolucoesPendentes = pacientes.filter((patient) => !evoluiuHoje(patient.id))
   const pacientesRisco = pacientes.filter((patient) => getPatientRisk(patient) !== "low").sort((a, b) => (getPatientRisk(a) === "high" ? -1 : 0) - (getPatientRisk(b) === "high" ? -1 : 0))
   const selectPatient = (patient: (typeof pacientes)[number]) => {
@@ -824,7 +406,7 @@ export default function NurseDashboard({
         role="Enfermagem"
         initials={userName.split(" ").filter(Boolean).map((part) => part[0]).slice(0, 2).join("").toUpperCase()}
         name={userName}
-        detail={ENFERMEIRA.cargo}
+        detail="Enfermagem"
         tabs={tabs}
         activeTab={activeTab}
         onSelect={(key) => setActiveTab(key as Tab)}
@@ -838,7 +420,7 @@ export default function NurseDashboard({
           role="Enfermagem"
           section={activeTabInfo?.label ?? ""}
           name={userName}
-          detail={ENFERMEIRA.cargo}
+          detail="Enfermagem"
           initials={userName.split(" ").filter(Boolean).map((part) => part[0]).slice(0, 2).join("").toUpperCase()}
           theme={theme}
           onToggleTheme={onToggleTheme}
@@ -853,7 +435,6 @@ export default function NurseDashboard({
           <div className={activeTab === "monitoramento" ? "block" : "hidden"} aria-hidden={activeTab !== "monitoramento"}>
             <VitalMonitoring
               profile="Enfermagem"
-              storageKey="inteliHosp-monitoramento"
               onAlertsChange={setMonitoringAlerts}
               acknowledgedAlerts={monitoringAcknowledged}
               setAcknowledgedAlerts={setMonitoringAcknowledged}
@@ -867,7 +448,7 @@ export default function NurseDashboard({
               <HeroHeader
                 eyebrow={`Central do plantão · ${shiftLabel()}`}
                 title={`${greeting()}, ${userName.split(" ")[0]}`}
-                subtitle={`${formatLongLocalDate()} · ${ENFERMEIRA.cargo}`}
+                subtitle={`${formatLongLocalDate()} · Enfermagem`}
                 aside={
                   <div className="hero-actions grid grid-cols-3 gap-2 lg:flex lg:flex-wrap">
                     <QuickAction variant="hero" icon="administracao" label="Administrar medicação" onClick={() => setActiveTab("administracao")} />
@@ -878,16 +459,16 @@ export default function NurseDashboard({
               >
                 <div className="keep-2-cols grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
                   <HeroStat label="Pacientes sob cuidado" value={pacientes.length} hint={`${pacientes.filter((p) => p.prescricaoAtiva).length} com prescrição ativa`} />
-                  <HeroStat label="Medicações pendentes" value={dosesPendentes.length} hint={`${dosesConfirmadas} de ${totalDoses} confirmadas`} />
-                  <HeroStat label="Próxima hora" value={dosesProximas.length} hint="Doses previstas em até 60 min" />
-                  <HeroStat label="Alertas pendentes" value={alertasPendentes.length + monitoringPendingCount} hint="Clínicos e monitoramento" alert={alertasPendentes.length + monitoringPendingCount > 0} />
+                  <HeroStat label="Doses pendentes" value={dosesPendentes.length} hint={`${dosesConfirmadas} de ${totalDoses} confirmadas`} />
+                  <HeroStat label="Próximas doses" value={dosesProximas.length} hint="Previstas para os próximos 60 minutos" />
+                  <HeroStat label="Alertas pendentes" value={alertasPendentes.length + monitoringPendingCount} hint="Alertas clínicos e de monitoramento" alert={alertasPendentes.length + monitoringPendingCount > 0} />
                 </div>
               </HeroHeader>
 
               <div className="mb-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
                 <SectionCard
                   className="lg:col-span-2"
-                  title="Medicações do plantão"
+                  title="Doses do plantão"
                   description="Doses pendentes em ordem de horário"
                   icon="administracao"
                   action={<button type="button" onClick={() => setActiveTab("administracao")} className="min-h-9 rounded-lg px-3 text-xs font-semibold" style={{ background: "var(--secondary)", color: "var(--primary)" }}>Abrir administração</button>}
@@ -898,16 +479,18 @@ export default function NurseDashboard({
                       {dosesPrioritarias.slice(0, 7).map(({ item, patient }, index) => {
                         const status = doseStatus(item)
                         const soon = isSoon(item.horario)
+                        const hasClockTime = /^\d{1,2}:\d{2}$/.test(item.horario)
                         return (
                           <li key={item.id} className={index >= limiteDosesCelular && !listasExpandidas.doses ? "max-sm:hidden" : undefined}>
-                            <button type="button" onClick={() => goToPatient(patient.id, "administracao")} className="list-row grid w-full grid-cols-[3.5rem_minmax(0,1fr)_auto] items-center gap-3 rounded-xl border border-transparent p-2.5 text-left">
-                              <span className="text-center">
+                            <button type="button" onClick={() => goToPatient(patient.id, "administracao")} className={`list-row grid w-full ${hasClockTime ? "grid-cols-[3.5rem_minmax(0,1fr)_auto]" : "grid-cols-[minmax(0,1fr)_auto]"} items-center gap-3 rounded-xl border border-transparent p-2.5 text-left`}>
+                              {hasClockTime && <span className="text-center">
                                 <span className="block font-mono text-base font-semibold tabular-nums" style={{ color: "var(--role-strong)" }}>{item.horario}</span>
                                 <span className="block text-[11px]" style={{ color: soon ? "var(--warning-foreground)" : "var(--muted-foreground)" }}>{timeHint(item.horario)}</span>
-                              </span>
+                              </span>}
                               <span className="min-w-0">
-                                <span className="flex items-start gap-1.5 break-words text-sm font-semibold" style={{ color: "var(--foreground)" }}><UiIcon name="pill" size={14} className="mt-0.5 shrink-0" />{item.medicamento} · {item.dosagem}</span>
+                                <span className="flex min-w-0 items-start gap-1.5 text-sm font-semibold" style={{ color: "var(--foreground)" }}><UiIcon name="pill" size={14} className="mt-0.5 shrink-0" /><span className="min-w-0 break-words">{item.medicamento} · {item.dosagem}</span></span>
                                 <span className="block break-words text-xs" style={{ color: "var(--muted-foreground)" }}>{patient.nome} · Leito {patient.leito} · Via {item.via}</span>
+                                {!hasClockTime && <span className="mt-1.5 inline-flex max-w-full items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium" style={{ background: "var(--secondary)", color: "var(--muted-foreground)" }}><UiIcon name="clock" size={12} />Conforme aprazamento</span>}
                               </span>
                               <StatusBadge tone={soon && status.status !== "atrasado" ? "warning" : status.tone} icon={status.icon} size="sm">{soon && status.status !== "atrasado" ? "Próxima" : status.label}</StatusBadge>
                             </button>
@@ -916,10 +499,10 @@ export default function NurseDashboard({
                       })}
                     </ul>
                   ) : (
-                    <EmptyState icon="checkCircle" title="Todas as medicações foram confirmadas" description="Nenhuma dose pendente para os pacientes sob cuidado." />
+                    <EmptyState icon="checkCircle" title="Todas as doses foram confirmadas" description="Nenhuma dose pendente para os pacientes sob cuidado." />
                   )}
                   <ShowMoreButton expanded={!!listasExpandidas.doses} onToggle={() => alternarLista("doses")} hiddenCount={Math.min(7, dosesPrioritarias.length) - limiteDosesCelular} controls="lista-doses-plantao" label={["dose", "doses"]} />
-                  {dosesPendentes.length > 7 && <p className="px-2.5 pt-2 text-xs" style={{ color: "var(--muted-foreground)" }}>+ {dosesPendentes.length - 7} dose(s) na tela de administração</p>}
+                  {dosesPendentes.length > 7 && <p className="px-2.5 pt-2 text-xs" style={{ color: "var(--muted-foreground)" }}>+ {dosesPendentes.length - 7} dose{dosesPendentes.length - 7 === 1 ? "" : "s"} na tela de administração</p>}
                 </SectionCard>
 
                 <div className="flex flex-col gap-5">
@@ -999,9 +582,8 @@ export default function NurseDashboard({
                     return (
                       <article key={p.id} className={"flex min-w-0 flex-col overflow-hidden rounded-xl border" + (index >= limitePacientesCelular && !listasExpandidas.pacientes && !patientSearch.trim() ? " max-sm:hidden" : "")} style={{ background: "var(--card)", borderColor: "var(--border)" }}>
                         <div className="flex items-start gap-3 p-4">
-                          <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl" style={{ background: "var(--role-soft)", color: "var(--role-strong)" }}>
-                            <span className="text-[10px] font-semibold uppercase leading-none">Leito</span>
-                            <span className="text-sm font-bold leading-tight">{p.leito}</span>
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-[10px] font-bold leading-none whitespace-nowrap" style={{ background: "var(--role-soft)", color: "var(--role-strong)" }}>
+                            {p.leito}
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-start justify-between gap-2">
@@ -1119,7 +701,7 @@ export default function NurseDashboard({
             <div className="fade-in">
               <PageTitle
                 title="Administração de medicamentos"
-                subtitle="Confirme cada dose após a checagem · horário e profissional são registrados automaticamente"
+                subtitle="Confira cada dose e confirme somente depois de administrar o medicamento ao paciente."
                 meta={
                   <>
                     <MetaItem icon="clock" label="Agora" value={agora} tone="info" />
@@ -1149,7 +731,7 @@ export default function NurseDashboard({
 
                     <div className="flex items-start gap-3 rounded-xl border p-3.5 text-sm" style={{ background: "var(--warning-surface)", borderColor: toneStyles.warning.border, color: "var(--warning-foreground)" }} role="note">
                       <UiIcon name="shield" size={18} />
-                      <p><strong>Antes de confirmar:</strong> confira paciente, medicamento, dose, via e horário. Registro demonstrativo — não substitui a checagem à beira do leito.</p>
+                      <p><strong>Antes de confirmar:</strong> confira com atenção o paciente, o medicamento, a dose e a via. Confirme somente depois de administrar o medicamento. A confirmação marcará a dose como administrada.</p>
                     </div>
 
                     {prescricaoAtual.length === 0 && <EmptyState icon="administracao" title="Sem medicamentos para este paciente" />}
@@ -1157,15 +739,16 @@ export default function NurseDashboard({
                       {prescricaoAtual.map((item) => {
                         const status = doseStatus(item)
                         const adm = status.status === "administrado"
-                        const soon = !adm && isSoon(item.horario)
+                        const hasClockTime = /^\d{1,2}:\d{2}$/.test(item.horario)
+                        const soon = !adm && hasClockTime && isSoon(item.horario)
                         return (
                           <li key={item.id} className="relative overflow-hidden rounded-2xl border" style={{ background: adm ? "color-mix(in srgb, var(--success-surface) 45%, var(--card))" : "var(--card)", borderColor: soon ? toneStyles.warning.border : status.status === "atrasado" ? toneStyles.danger.border : "var(--border)", boxShadow: adm ? "none" : "var(--shadow-sm)" }}>
                             <span className="absolute inset-y-0 left-0 w-1.5" style={{ background: soon ? "var(--warning)" : toneStyles[status.tone].solid }} aria-hidden="true" />
                             <div className="flex flex-col gap-4 p-4 pl-6 sm:flex-row sm:items-center">
-                              <div className="flex items-center gap-4 sm:w-28 sm:flex-col sm:items-start sm:gap-0">
+                              {hasClockTime && <div className="flex items-center gap-4 sm:w-28 sm:flex-col sm:items-start sm:gap-0">
                                 <p className="font-mono text-2xl font-bold leading-none tabular-nums" style={{ color: adm ? "var(--muted-foreground)" : "var(--foreground)" }}>{item.horario}</p>
                                 {!adm && <p className="text-xs font-medium sm:mt-1" style={{ color: soon ? "var(--warning-foreground)" : "var(--muted-foreground)" }}>{timeHint(item.horario)}</p>}
-                              </div>
+                              </div>}
                               <div className="min-w-0 flex-1">
                                 <div className="flex flex-wrap items-center gap-2">
                                   <p className="text-base font-semibold" style={{ color: "var(--foreground)" }}>{item.medicamento}</p>
@@ -1177,13 +760,14 @@ export default function NurseDashboard({
                                   <div className="rounded-lg border px-2.5 py-1" style={{ borderColor: "var(--border)" }}><dt className="inline" style={{ color: "var(--muted-foreground)" }}>Via </dt><dd className="inline font-semibold" style={{ color: "var(--foreground)" }}>{item.via}</dd></div>
                                   <div className="rounded-lg border px-2.5 py-1" style={{ borderColor: "var(--border)" }}><dt className="inline" style={{ color: "var(--muted-foreground)" }}>Código </dt><dd className="inline font-mono" style={{ color: "var(--foreground)" }}>{item.id}</dd></div>
                                 </dl>
+                                {!hasClockTime && <span className="mt-2 inline-flex max-w-full items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium" style={{ background: "var(--secondary)", color: "var(--muted-foreground)" }}><UiIcon name="clock" size={13} />Conforme aprazamento</span>}
                               </div>
                               {adm ? (
                                 <p className="flex items-center gap-2 text-xs font-semibold sm:max-w-[12rem]" style={{ color: "var(--success-foreground)" }}>
                                   <UiIcon name="checkCircle" size={18} /> Administração registrada · {userName}
                                 </p>
                               ) : (
-                                <button type="button" onClick={() => confirmarAdministracao(item.id)} aria-label={`Confirmar administração de ${item.medicamento} ${item.dosagem} às ${item.horario}`} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold" style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}>
+                                <button type="button" onClick={(event) => { returnFocusRef.current = event.currentTarget; setConfirmacaoAdministracao(item) }} aria-label={`Confirmar administração de ${item.medicamento} ${item.dosagem} ao paciente ${selectedPaciente.nome}`} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold" style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}>
                                   <UiIcon name="check" size={16} /> Confirmar
                                 </button>
                               )}
@@ -1208,13 +792,13 @@ export default function NurseDashboard({
                 subtitle="Registro de enfermagem enviado diretamente ao médico responsável"
                 meta={
                   <>
-                    <MetaItem icon="evolucao" label="Evoluídos hoje" value={`${pacientes.length - evolucoesPendentes.length}/${pacientes.length}`} tone="success" />
+                    <MetaItem icon="evolucao" label="Evoluções registradas hoje" value={`${pacientes.length - evolucoesPendentes.length}/${pacientes.length}`} tone="success" />
                     <MetaItem icon="clock" label="Pendentes" value={evolucoesPendentes.length} tone="warning" />
                   </>
                 }
               />
               <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)]">
-                {renderPatientPicker(filteredPatients, "Pacientes", (p) => `Leito ${p.leito} · ${evoluiuHoje(p.id) ? "evoluído hoje" : "evolução pendente"}`)}
+                {renderPatientPicker(filteredPatients, "Pacientes", (p) => `Leito ${p.leito} · ${evoluiuHoje(p.id) ? "evolução registrada hoje" : "evolução pendente"}`)}
                 {selectedPaciente ? (
                   <div className="flex min-w-0 flex-col gap-5">
                     <section className="overflow-hidden rounded-2xl border" style={{ background: "var(--card)", borderColor: "var(--border)", boxShadow: "var(--shadow-sm)" }} aria-label="Paciente selecionado">
@@ -1271,7 +855,7 @@ export default function NurseDashboard({
                       </div>
                     </SectionCard>
 
-                    <SectionCard title="Registros anteriores" description={`${(evolucoesPorPaciente[selectedPaciente.id] ?? []).length} registro(s)`} icon="atividades">
+                    <SectionCard title="Registros anteriores" description={`${selectedPatientEvolutionCount} registro${selectedPatientEvolutionCount === 1 ? "" : "s"}`} icon="atividades">
                       {(evolucoesPorPaciente[selectedPaciente.id] ?? []).length ? (
                         <ol>
                           {(evolucoesPorPaciente[selectedPaciente.id] ?? []).map((rc, i, list) => (
@@ -1302,7 +886,7 @@ export default function NurseDashboard({
             </div>
           )}
 
-          {activeTab === "atividades" && <ActivityLog />}
+          {activeTab === "atividades" && <ActivityLog token={token} role="ENFERMEIRA" />}
 
           {activeTab === "alertas" && (
             <div className="fade-in">
@@ -1338,7 +922,7 @@ export default function NurseDashboard({
                 {alertasAtivos.map((a) => {
                   const p = pacientes.find((x) => x.id === a.pacienteId)
                   const tone = riskTone(a.severity)
-                  const reconhecido = alertasReconhecidos.includes(a.id)
+                  const reconhecido = false
                   return (
                     <article
                       key={a.id}
@@ -1378,6 +962,24 @@ export default function NurseDashboard({
             </div>
           )}
 
+          {confirmacaoAdministracao && selectedPaciente && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" role="presentation">
+              <div ref={confirmDialogRef} role="alertdialog" aria-modal="true" aria-labelledby="confirm-administration-title" aria-describedby="confirm-administration-description" className="w-full max-w-md rounded-2xl border p-5 shadow-2xl sm:p-6" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
+                <div className="flex items-start gap-3">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl" style={{ background: "var(--warning-surface)", color: "var(--warning-foreground)" }} aria-hidden="true"><UiIcon name="shield" size={21} /></span>
+                  <div className="min-w-0">
+                    <h2 id="confirm-administration-title" className="text-lg font-bold" style={{ color: "var(--foreground)" }}>Confirme a administração</h2>
+                    <p id="confirm-administration-description" className="mt-1 text-sm leading-relaxed" style={{ color: "var(--muted-foreground)" }}>Você confirma que já administrou <strong style={{ color: "var(--foreground)" }}>{confirmacaoAdministracao.medicamento}</strong> ({confirmacaoAdministracao.dosagem}, via {confirmacaoAdministracao.via}) ao paciente <strong style={{ color: "var(--foreground)" }}>{selectedPaciente.nome}</strong>?</p>
+                  </div>
+                </div>
+                <p className="mt-4 rounded-xl px-3.5 py-3 text-sm" style={{ background: "var(--warning-surface)", color: "var(--warning-foreground)" }}>Confirme somente se a dose já foi administrada.</p>
+                <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                  <button ref={cancelConfirmationRef} type="button" onClick={() => setConfirmacaoAdministracao(null)} className="min-h-11 rounded-xl border px-4 text-sm font-semibold" style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--foreground)" }}>Voltar</button>
+                  <button type="button" onClick={() => { const item = confirmacaoAdministracao; setConfirmacaoAdministracao(null); void confirmarAdministracao(item.id) }} className="min-h-11 rounded-xl px-4 text-sm font-semibold" style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}>Sim, já administrei</button>
+                </div>
+              </div>
+            </div>
+          )}
         </main>
         </SectionContext.Provider>
       </div>
