@@ -51,6 +51,7 @@ done
 if [ -z "${MONITOR_API_KEY:-}" ]; then
   MONITOR_API_KEY="$(grep -E '^MONITOR_API_KEY=' "$SIM_DIR/.env" 2>/dev/null | cut -d= -f2- | tr -d '"' || true)"
 fi
+MONITOR_API_KEY="$(printf '%s' "$MONITOR_API_KEY" | tr -d '\r')"
 [ -n "$MONITOR_API_KEY" ] || fail "MONITOR_API_KEY não definida (nem no ambiente nem em simulador-laravel/.env)."
 export MONITOR_API_KEY
 
