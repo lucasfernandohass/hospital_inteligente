@@ -190,9 +190,9 @@ export default function LoginPage({ onLogin, onRoleSelect, theme, onToggleTheme 
             aria-hidden="true"
           >
             <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: "#86A0B8" }}>
-              <span>Leito 12A · Monitor</span>
+              <span>UTI-01 · Monitor</span>
               <span className="flex items-center gap-1.5" style={{ color: "#35E08F" }}>
-                <span className="h-1.5 w-1.5 rounded-full bg-current" /> Ao vivo
+                <span className="h-1.5 w-1.5 rounded-full bg-current" /> Simulado
               </span>
             </div>
             <svg viewBox="0 0 320 56" className="mt-3 h-14 w-full">

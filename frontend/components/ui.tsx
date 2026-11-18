@@ -391,7 +391,7 @@ export function Avatar({ initials, size = "md", tone = "role", solid = false }: 
   const dims = size === "lg" ? "h-14 w-14 text-base" : size === "sm" ? "h-8 w-8 text-[11px]" : "h-10 w-10 text-xs"
   const t = toneStyles[tone]
   return (
-    <span className={"flex shrink-0 items-center justify-center rounded-full font-bold " + dims} style={{ background: solid ? t.solid : t.bg, color: solid ? "#FFFFFF" : t.fg }} aria-hidden="true">
+    <span className={"flex shrink-0 items-center justify-center rounded-full font-bold leading-none " + dims} style={{ background: solid ? t.solid : t.bg, color: solid ? "#FFFFFF" : t.fg }} aria-hidden="true">
       {initials}
     </span>
   )
@@ -719,7 +719,7 @@ export function DashboardHeader({
             <div className="truncate text-xs" style={{ color: "var(--muted-foreground)" }}>{detail}</div>
           </div>
           <div
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-bold leading-none text-white"
             style={{ background: "linear-gradient(135deg, var(--role), #0D1B2A)" }}
             aria-hidden="true"
           >

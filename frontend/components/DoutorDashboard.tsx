@@ -487,6 +487,7 @@ export default function DoctorDashboard({
     return groups
   }, [])
   const itemHorario = (item: object) => ("horario" in item && typeof item.horario === "string" ? item.horario : "")
+  const selectedEvolutionCount = selectedPaciente ? (evolucoesClinicas[selectedPaciente.id] ?? []).length : 0
   const inputStyle = { background: "var(--background)", borderColor: "var(--border)", color: "var(--foreground)" }
   const labelClass = "flex min-w-0 flex-col gap-1.5 text-xs font-semibold"
 
@@ -594,11 +595,11 @@ export default function DoctorDashboard({
                   title="Alertas prioritários"
                   description="Requerem avaliação médica"
                   icon="alert"
-                  tone={alertasPendentes.length ? "danger" : "success"}
+                  tone={alertasPendentes.length + monitoringPendingCount ? "danger" : "success"}
                   action={<button type="button" onClick={() => setActiveTab("alertas")} className="min-h-9 rounded-lg px-2 text-xs font-semibold" style={{ color: "var(--primary)" }}>Ver todos</button>}
                   bodyClassName="p-3"
                 >
-                  {alertasPendentes.length ? (
+                  {alertasPendentes.length + monitoringPendingCount ? (
                     <ul className="space-y-2">
                       {alertasPendentes.map((alert) => {
                         const patient = pacientes.find((item) => item.id === alert.pacienteId)
@@ -814,7 +815,7 @@ export default function DoctorDashboard({
 
                       <SectionCard
                         title="Evolução clínica"
-                        description={`${(evolucoesClinicas[selectedPaciente.id] ?? []).length} registro(s) · médicos e enfermagem`}
+                        description={`${selectedEvolutionCount} registro${selectedEvolutionCount === 1 ? "" : "s"} · médicos e profissionais de enfermagem`}
                         icon="evolucao"
                         action={
                           <button
@@ -835,7 +836,7 @@ export default function DoctorDashboard({
                               <textarea required value={evolutionDraft} onChange={(event) => setEvolutionDraft(event.target.value)} rows={4} placeholder="Registre a avaliação, conduta ou observação clínica" className="min-h-24 rounded-lg border p-3 text-sm font-normal" style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--foreground)" }} />
                             </label>
                             <div className="flex flex-wrap items-center justify-between gap-2">
-                              <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>Autor: {userName} · data e hora automáticas</span>
+                              <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>Responsável: {userName} · data e hora preenchidas automaticamente</span>
                               <div className="flex gap-2">
                                 <button type="button" onClick={() => { setShowEvolutionForm(false); setEvolutionDraft("") }} className="min-h-10 rounded-lg px-4 text-sm font-semibold" style={{ background: "var(--secondary)", color: "var(--primary)" }}>Cancelar</button>
                                 <button type="submit" disabled={!evolutionDraft.trim()} className="min-h-10 rounded-lg px-4 text-sm font-semibold" style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}>Salvar evolução</button>
@@ -880,7 +881,7 @@ export default function DoctorDashboard({
             <div className="fade-in">
               <PageTitle
                 title="Prescrições"
-                subtitle="Prescrições médicas, itens emitidos e situação da administração pela enfermagem"
+                subtitle="Prescrições médicas, itens emitidos e situação da administração pela equipe de enfermagem"
                 action={
                   <button
                     type="button"
@@ -920,7 +921,7 @@ export default function DoctorDashboard({
                     </FormSection>
                     <FormSection step={2} title="Posologia" description="Via, horário de início e duração do tratamento">
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                        <label className={labelClass} style={{ color: "var(--foreground)" }}>Via
+                        <label className={labelClass} style={{ color: "var(--foreground)" }}>Via de administração
                           <select value={prescriptionForm.via} onChange={(event) => setPrescriptionForm({ ...prescriptionForm, via: event.target.value })} className="min-h-11 rounded-lg border px-3 text-sm font-normal" style={inputStyle}>
                             <option>Oral</option><option>IV</option><option>IM</option><option>SC</option><option>Tópica</option>
                           </select>
@@ -945,7 +946,7 @@ export default function DoctorDashboard({
                       </p>
                       <div className="flex gap-2">
                         <button type="button" onClick={() => setShowPrescriptionForm(false)} className="min-h-11 flex-1 rounded-lg px-4 text-sm font-semibold sm:flex-none" style={{ background: "var(--secondary)", color: "var(--primary)" }}>Cancelar</button>
-                        <button type="submit" className="min-h-11 flex-1 rounded-lg px-5 text-sm font-semibold sm:flex-none" style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}>Salvar prescrição simulada</button>
+                        <button type="submit" className="min-h-11 flex-1 rounded-lg px-5 text-sm font-semibold sm:flex-none" style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}>Salvar prescrição</button>
                       </div>
                     </div>
                   </form>
@@ -997,7 +998,7 @@ export default function DoctorDashboard({
                                 <table className="w-full text-sm">
                                   <thead>
                                     <tr style={{ color: "var(--muted-foreground)" }}>
-                                      {["Medicamento", "Dose", "Via", "Frequência", "Horário", "Duração", "Qtd", "Situação"].map((h) => (
+                                      {["Medicamento", "Dose", "Via", "Frequência", "Horário", "Duração", "Quantidade", "Situação"].map((h) => (
                                         <th key={h} className="px-4 py-2.5 text-left">{h}</th>
                                       ))}
                                     </tr>
@@ -1034,7 +1035,7 @@ export default function DoctorDashboard({
                                       <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg" style={{ background: "var(--role-soft)", color: "var(--role-strong)" }}><UiIcon name="pill" size={15} /></span>
                                       <div className="min-w-0 flex-1">
                                         <p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>{item.medicamento} · {item.dosagem}</p>
-                                        <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>{item.via} · {item.frequencia} · {item.duracao} · Qtd {item.quantidade}{itemHorario(item) ? ` · início ${itemHorario(item)}` : ""}</p>
+                                        <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>{item.via} · {item.frequencia} · {item.duracao} · Quantidade: {item.quantidade}{itemHorario(item) ? ` · início ${itemHorario(item)}` : ""}</p>
                                       </div>
                                       {done ? <StatusBadge tone="success" icon="check" size="sm">Administrado</StatusBadge> : <StatusBadge tone="neutral" icon="clock" size="sm">Pendente</StatusBadge>}
                                     </li>
@@ -1079,12 +1080,12 @@ export default function DoctorDashboard({
                   <>
                     <MetaItem icon="checkCircle" label="Com resultado" value={todosExames.filter((exam) => exam.status === "resultado").length} tone="success" />
                     <MetaItem icon="clock" label="Em andamento" value={todosExames.filter((exam) => exam.status === "em andamento").length} tone="warning" />
-                    <MetaItem icon="agenda" label="Agendados/solicitados" value={todosExames.filter((exam) => exam.status === "agendado").length} tone="info" />
+                    <MetaItem icon="agenda" label="Agendados ou solicitados" value={todosExames.filter((exam) => exam.status === "agendado").length} tone="info" />
                   </>
                 }
               />
               {showExamForm && (
-                <SectionCard title="Solicitar exame" description="Solicitação compartilhada com a recepção neste navegador" icon="exames" className="slide-up mb-5">
+                <SectionCard title="Solicitar exame" description="A solicitação será registrada no sistema e ficará disponível para a recepção." icon="exames" className="slide-up mb-5">
                   <form onSubmit={handleSolicitarExame} className="flex flex-col gap-5">
                     <FormSection step={1} title="Paciente e exame">
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -1331,7 +1332,7 @@ export default function DoctorDashboard({
                         <div className="mt-3">
                           <div className="mb-1.5 flex justify-between text-xs" style={{ color: "var(--muted-foreground)" }}>
                             <span>{diaInternacao ? `${diaInternacao}º dia de internação` : "Tempo de internação indisponível"}</span>
-                            {totalPrevisto && (progresso !== null && progresso > 100 ? <span className="font-semibold" style={{ color: "var(--danger-foreground)" }}>alta prevista ultrapassada</span> : <span>previsão de {totalPrevisto} dias</span>)}
+                            {totalPrevisto && (progresso !== null && progresso > 100 ? <span className="font-semibold" style={{ color: "var(--danger-foreground)" }}>Prazo de alta previsto ultrapassado</span> : <span>Previsão: {totalPrevisto} dias</span>)}
                           </div>
                           {progresso !== null && <ProgressBar value={progresso} tone={progresso > 100 ? "danger" : progresso > 80 ? "warning" : "role"} label="Progresso até a alta prevista" />}
                         </div>

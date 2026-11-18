@@ -13,7 +13,7 @@ import type { Hospitalization } from "./hospitalizationStore"
 import type { SharedExamRequest } from "./examStore"
 import { usePanelRoute } from "../hooks/usePanelRoute"
 import { api, ApiError, type DoctorDto, type InternmentDto } from "../services/api"
-import { mapAppointment, mapBed, mapInternment, mapPatient } from "../services/mappers"
+import { formatBedNumber, formatSpecialty, mapAppointment, mapBed, mapInternment, mapPatient } from "../services/mappers"
 
 interface Props {
   onNavigate: (screen: Screen) => void
@@ -122,6 +122,7 @@ export default function ReceptionistDashboard({
     sexo: "",
   })
   const [cadastroSucesso, setCadastroSucesso] = useState(false)
+  const [cadastroPacienteError, setCadastroPacienteError] = useState("")
   // CPF do paciente recém-cadastrado: só ele deixa de exibir o aviso de duplicidade durante a mensagem de sucesso
   const [cpfRecemCadastrado, setCpfRecemCadastrado] = useState("")
 
@@ -247,7 +248,6 @@ export default function ReceptionistDashboard({
   }, [leitos, filtroStatus, filtroAndar, filtroSetor, filtroTipo])
   const setoresDisponiveis = [...new Set(leitos.map((bed) => bed.setor).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"))
   const leitoMapaSelecionado = leitos.find((bed) => bed.id === leitoMapaSelecionadoId)
-
   const leitosDisponiveis = leitos.filter((l) => l.status === "Disponível")
   const leitosOcupados = leitos.filter((l) => l.status === "Ocupado")
 
@@ -293,31 +293,34 @@ export default function ReceptionistDashboard({
   const handleCadastroPaciente = async () => {
     if (!podeCadastrar) return
     setApiError("")
+    setCadastroPacienteError("")
     try {
       const created = await api.createPatient({
         nome: formPaciente.nome.trim(), cpf: formPaciente.cpf.replace(/\D/g, ""),
-        dataNascimento: formPaciente.dataNasc, telefone: formPaciente.telefone,
+        dataNascimento: formPaciente.dataNasc.split("/").reverse().join("-"), telefone: formPaciente.telefone,
         endereco: "", numeroProntuario: `PR-${Date.now()}`, convenio: formPaciente.convenio.trim(), sexo: formPaciente.sexo,
       }, token)
       const novoPaciente = mapPatient(created)
-    setPacientesCadastrados((current) => [...current, novoPaciente])
-    setPacienteEncontrado(novoPaciente)
-    logActivity("Recepção", "Cadastro concluído", "Paciente", novoPaciente.id)
-    setCpfRecemCadastrado(novoPaciente.cpf)
-    setCadastroSucesso(true)
-    setTimeout(() => {
-      setCadastroSucesso(false)
-      setCpfRecemCadastrado("")
-      setFormPaciente({
-        nome: "",
-        cpf: "",
-        dataNasc: "",
-        telefone: "",
-        convenio: "",
-        sexo: "",
-      })
-    }, 2500)
-    } catch (error) { setApiError(error instanceof ApiError ? error.message : "Não foi possível cadastrar o paciente.") }
+      setPacientesCadastrados((current) => [...current, novoPaciente])
+      setPacienteEncontrado(novoPaciente)
+      logActivity("Recepção", "Cadastro concluído", "Paciente", novoPaciente.id)
+      setCpfRecemCadastrado(novoPaciente.cpf)
+      setCadastroSucesso(true)
+      setTimeout(() => {
+        setCadastroSucesso(false)
+        setCpfRecemCadastrado("")
+        setFormPaciente({
+          nome: "",
+          cpf: "",
+          dataNasc: "",
+          telefone: "",
+          convenio: "",
+          sexo: "",
+        })
+      }, 2500)
+    } catch (error) {
+      setCadastroPacienteError(error instanceof ApiError ? error.message : "Não foi possível cadastrar o paciente.")
+    }
   }
 
   const handleBuscarPaciente = () => {
@@ -364,7 +367,7 @@ export default function ReceptionistDashboard({
     const created = await api.createBed({ numero, andar: Number(formLeito.andar.match(/\d+/)?.[0] ?? 1), quarto: numero, setor: formLeito.setor, tipo: formLeito.tipo, status: "Disponível", observacao: null }, token)
     const novo = mapBed(created)
     setLeitos((current) => [...current, novo])
-    logActivity("Recepção", "Cadastro concluído", "Leito", `${novo.id} · ${novo.numero} · ${novo.setor} · ${novo.andar}`)
+    logActivity("Recepção", "Cadastro concluído", "Leito", `${novo.id} · ${formatBedNumber(novo)} · ${novo.setor} · ${novo.andar}`)
     setLeitoError("")
     setLeitoSucesso(true)
     setTimeout(() => {
@@ -382,7 +385,7 @@ export default function ReceptionistDashboard({
       const updated = await api.updateBed(current.id, { ...current, status: "Disponível" }, token)
       setLeitos((items) => items.map((item) => item.id === leitoId ? mapBed(updated) : item))
     } catch (error) { setApiError(error instanceof ApiError ? error.message : "Não foi possível atualizar o leito."); return }
-    logActivity("Recepção", "Leito liberado após higienização", "Leito", `${leito.numero} · ${leito.andar}`)
+    logActivity("Recepção", "Leito liberado após higienização", "Leito", `${formatBedNumber(leito)} · ${leito.andar}`)
   }
 
   const handleCadastroInternacao = async () => {
@@ -409,7 +412,7 @@ export default function ReceptionistDashboard({
     const admission = mapInternment(created, await api.listBeds(token), medicosDisponiveis)
     setInternacoesLocais((current) => [admission, ...current])
     setLeitos((current) => current.map((bed) => bed.id === leitoSelecionado.id ? { ...bed, status: "Ocupado", pacienteId: paciente.id } : bed))
-    logActivity("Recepção", "Internação registrada", paciente.id, `${admission.id} · Leito ${admission.leito} · ${admission.motivo}`)
+    logActivity("Recepção", "Internação registrada", paciente.id, `${admission.id} · Leito ${formatBedNumber(leitoSelecionado)} · ${admission.motivo}`)
     setInternacaoError("")
     setInternacaoSucesso(true)
     setTimeout(() => {
@@ -439,7 +442,7 @@ export default function ReceptionistDashboard({
       setInternacoesLocais((items) => items.map((item) => item.id === admission.id ? { ...item, status: "Alta", dataAlta } : item))
       setLeitos((items) => items.map((item) => item.id === leitoId ? { ...item, status: "Higienização", pacienteId: undefined } : item))
     } catch (error) { setApiError(error instanceof ApiError ? error.message : "Não foi possível registrar a alta."); return }
-    logActivity("Recepção", "Alta registrada", pacienteId, `Leito ${leito.numero} · ${dataAlta}`)
+    logActivity("Recepção", "Alta registrada", pacienteId, `Leito ${formatBedNumber(leito)} · ${dataAlta}`)
     setAltaEmConfirmacaoId(null)
   }
 
@@ -515,7 +518,10 @@ export default function ReceptionistDashboard({
     setFiltroAndar("Todos")
     setFiltroTipo("Todos")
   }
-  const limparCadastroPaciente = () => setFormPaciente({ nome: "", cpf: "", dataNasc: "", telefone: "", convenio: "", sexo: "" })
+  const limparCadastroPaciente = () => {
+    setFormPaciente({ nome: "", cpf: "", dataNasc: "", telefone: "", convenio: "", sexo: "" })
+    setCadastroPacienteError("")
+  }
   const checklistCadastro = [
     { label: "Nome completo", ok: formPaciente.nome.trim().length >= 3 },
     { label: "CPF válido", ok: cpfValido },
@@ -525,14 +531,17 @@ export default function ReceptionistDashboard({
     { label: "Convênio", ok: formPaciente.convenio.length > 0 },
     { label: "Sexo", ok: formPaciente.sexo.length > 0 },
   ]
+  const leitosAguardandoHigienizacao = contarLeitos("Higienização")
+  const leitosEmManutencao = contarLeitos("Manutenção")
+  const examesPendentes = examesDaRecepcao.filter((exam) => exam.status === "agendado").length
   const avisos = [
     contarLeitos("Higienização") > 0 && { tone: "warning" as Tone, icon: "clock", text: `${contarLeitos("Higienização")} leito(s) aguardando liberação após higienização`, action: () => { setFiltroStatus("Higienização"); setActiveTab("mapa-leitos") } },
     contarLeitos("Manutenção") > 0 && { tone: "neutral" as Tone, icon: "shield", text: `${contarLeitos("Manutenção")} leito(s) em manutenção`, action: () => { setFiltroStatus("Manutenção"); setActiveTab("mapa-leitos") } },
     examesDaRecepcao.filter((exam) => exam.status === "agendado").length > 0 && { tone: "info" as Tone, icon: "exames", text: `${examesDaRecepcao.filter((exam) => exam.status === "agendado").length} exame(s) solicitado(s) pelos médicos`, action: undefined },
     leitosDisponiveis.length === 0 && { tone: "danger" as Tone, icon: "alert", text: "Nenhum leito disponível para novas internações", action: () => setActiveTab("mapa-leitos") },
   ].filter((item): item is { tone: Tone; icon: string; text: string; action: (() => void) | undefined } => Boolean(item))
-  const enviarFicha = (pacienteId: string, leitoNumero: string) => {
-    logActivity("Recepção", "Ficha enviada ao setor", pacienteId, `Ficha de atendimento · Leito ${leitoNumero}`)
+  const enviarFicha = (pacienteId: string, numeroLeito: string) => {
+    logActivity("Recepção", "Ficha enviada ao setor", pacienteId, `Ficha de atendimento · Leito ${numeroLeito}`)
     setFichaEnviadaId(pacienteId)
   }
 
@@ -610,7 +619,7 @@ export default function ReceptionistDashboard({
                               <Avatar initials={iniciais(item.paciente)} size="sm" tone="neutral" />
                               <span className="min-w-0">
                                 <span className="block break-words text-sm font-semibold" style={{ color: "var(--foreground)" }}>{item.paciente}</span>
-                                <span className="block break-words text-xs" style={{ color: "var(--muted-foreground)" }}>{medico ? `${medico.nome} · ${medico.especialidade}` : "Profissional não identificado"}</span>
+                                <span className="block break-words text-xs" style={{ color: "var(--muted-foreground)" }}>{medico ? `${medico.nome} · ${formatSpecialty(medico.especialidade)}` : "Profissional não identificado"}</span>
                               </span>
                             </span>
                             <StatusBadge tone={appointmentTone(status)} size="sm">{status}</StatusBadge>
@@ -661,7 +670,7 @@ export default function ReceptionistDashboard({
               </div>
 
               <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-                <SectionCard className="lg:col-span-2" title="Exames marcados" description="Agenda de exames e solicitações dos médicos" icon="exames" bodyClassName="p-2 sm:p-3">
+                <SectionCard className="lg:col-span-2" title="Exames solicitados" description="Solicitações dos médicos e situação dos exames" icon="exames" bodyClassName="p-2 sm:p-3">
                   <ul className="space-y-1" id="lista-exames-recepcao">
                     {examesDaRecepcao.map((exam, index) => (
                       <li key={exam.id} className={"grid grid-cols-[minmax(0,1fr)] items-center gap-3 rounded-xl border p-2.5 sm:grid-cols-[minmax(0,1fr)_auto]" + (index >= limiteExamesCelular && !listasExpandidas.exames ? " max-sm:hidden" : "")} style={{ borderColor: "var(--border)" }}>
@@ -689,7 +698,7 @@ export default function ReceptionistDashboard({
                             <Avatar initials={iniciais(medico.nome.replace(/^(Dr\.|Dra\.)\s*/i, ""))} size="sm" />
                             <span className="min-w-0 flex-1">
                               <span className="block break-words text-sm font-semibold" style={{ color: "var(--foreground)" }}>{medico.nome}</span>
-                              <span className="block break-words text-xs" style={{ color: "var(--muted-foreground)" }}>{medico.especialidade}{proxima ? ` · próxima ${proxima.hora}` : ""}</span>
+                              <span className="block break-words text-xs" style={{ color: "var(--muted-foreground)" }}>{formatSpecialty(medico.especialidade)}{proxima ? ` · próxima ${proxima.hora}` : ""}</span>
                             </span>
                             {consultas.length ? <StatusBadge tone="info" size="sm">{consultas.length} consulta{consultas.length === 1 ? "" : "s"}</StatusBadge> : <StatusBadge tone="success" size="sm">Agenda livre</StatusBadge>}
                           </li>
@@ -739,7 +748,7 @@ export default function ReceptionistDashboard({
                 }
               />
               <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-                <SectionCard title="Ficha cadastral" description="Os dados ficam disponíveis para médicos e enfermagem" icon="cadastro-paciente">
+                <SectionCard title="Ficha cadastral" description="Os dados ficam disponíveis para as equipes médica e de enfermagem" icon="cadastro-paciente">
                   <form
                     className="flex flex-col gap-6"
                     onSubmit={(event) => {
@@ -757,7 +766,7 @@ export default function ReceptionistDashboard({
                           placeholder="Ex.: João da Silva"
                           autoComplete="name"
                           required
-                          error={formPaciente.nome.length > 0 && formPaciente.nome.trim().length < 3 ? "Informe ao menos 3 caracteres" : undefined}
+                          error={formPaciente.nome.length > 0 && formPaciente.nome.trim().length < 3 ? "Informe pelo menos 3 caracteres." : undefined}
                         />
                         <TextField
                           label="CPF"
@@ -816,7 +825,10 @@ export default function ReceptionistDashboard({
                       </div>
                     </FormSection>
                     <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: "var(--border)" }}>
-                      <div>{cadastroSucesso ? <InlineNotice tone="success">Paciente cadastrado</InlineNotice> : <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>Campos obrigatórios são validados automaticamente</span>}</div>
+                      <div className="space-y-2">
+                        {cadastroPacienteError && <InlineNotice tone="danger">{cadastroPacienteError}</InlineNotice>}
+                        {cadastroSucesso ? <InlineNotice tone="success">Paciente cadastrado</InlineNotice> : <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>Campos obrigatórios são validados automaticamente</span>}
+                      </div>
                       <div className="flex gap-2">
                         <button type="button" onClick={limparCadastroPaciente} className="min-h-11 flex-1 rounded-lg border px-4 text-sm font-semibold sm:flex-none" style={{ background: "var(--card)", color: "var(--foreground)", borderColor: "var(--border)" }}>Limpar</button>
                         <button type="submit" disabled={!podeCadastrar} className="min-h-11 flex-1 rounded-lg px-5 text-sm font-semibold sm:flex-none" style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}>Cadastrar paciente</button>
@@ -900,7 +912,7 @@ export default function ReceptionistDashboard({
                       className="inline-flex min-h-9 items-center gap-2 rounded-full border px-2.5 text-xs font-medium"
                       style={{ background: pacienteEncontrado?.id === patient.id ? "var(--role-soft)" : "var(--card)", borderColor: pacienteEncontrado?.id === patient.id ? "var(--role)" : "var(--border)", color: "var(--foreground)" }}
                     >
-                      <span className="flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold" style={{ background: "var(--secondary)", color: "var(--control-foreground)" }}>{iniciais(patient.nome)}</span>
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold leading-none" style={{ background: "var(--secondary)", color: "var(--control-foreground)" }}>{iniciais(patient.nome)}</span>
                       {patient.nome}
                     </button>
                   ))}
@@ -916,7 +928,12 @@ export default function ReceptionistDashboard({
                         <h2 className="break-words text-lg font-bold" style={{ color: "var(--foreground)" }}>{pacienteEncontrado.nome}</h2>
                         <p className="font-mono text-xs" style={{ color: "var(--muted-foreground)" }}>{pacienteEncontrado.id}</p>
                         <div className="mt-1.5">
-                          {internacaoDoPaciente(pacienteEncontrado.id) ? <StatusBadge tone="danger" icon="internacao" size="sm">Internado · Leito {internacaoDoPaciente(pacienteEncontrado.id)?.leito.numero}</StatusBadge> : <StatusBadge tone="success" size="sm">Sem internação ativa</StatusBadge>}
+                          {(() => {
+                            const internacao = internacaoDoPaciente(pacienteEncontrado.id)
+                            return internacao
+                              ? <StatusBadge tone="danger" icon="internacao" size="sm">Internado · Leito {formatBedNumber(internacao.leito)}</StatusBadge>
+                              : <StatusBadge tone="success" size="sm">Sem internação ativa</StatusBadge>
+                          })()}
                         </div>
                       </div>
                     </div>
@@ -972,7 +989,7 @@ export default function ReceptionistDashboard({
                               <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--muted-foreground)" }}>Internação</p>
                               {internacao ? (
                                 <>
-                                  <p className="mt-1 text-sm font-semibold" style={{ color: "var(--foreground)" }}>Leito {internacao.leito.numero} · {internacao.leito.setor || internacao.leito.tipo}</p>
+                                  <p className="mt-1 text-sm font-semibold" style={{ color: "var(--foreground)" }}>Leito {formatBedNumber(internacao.leito)} · {internacao.leito.setor || internacao.leito.tipo}</p>
                                   <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>{internacao.leito.andar}{internacao.internacao ? ` · ${internacao.internacao.motivo} · ${internacao.internacao.medico}` : ""}</p>
                                 </>
                               ) : (
@@ -1054,7 +1071,7 @@ export default function ReceptionistDashboard({
                             setLeitoError("")
                             setFormLeito({ ...formLeito, numero: value.toUpperCase() })
                           }}
-                          placeholder="Ex.: 12A"
+                          placeholder="Ex.: CM-01 ou UTI-05"
                           required
                           error={leitoError || undefined}
                         />
@@ -1083,7 +1100,7 @@ export default function ReceptionistDashboard({
                       </div>
                     </FormSection>
                     <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: "var(--border)" }}>
-                      <div>{leitoSucesso ? <InlineNotice tone="success">Leito cadastrado</InlineNotice> : <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>Número do leito deve ser único</span>}</div>
+                      <div>{leitoSucesso ? <InlineNotice tone="success">Leito cadastrado</InlineNotice> : <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>O número do leito deve ser único.</span>}</div>
                       <div className="flex gap-2">
                         <button type="button" onClick={() => { setLeitoError(""); setFormLeito({ numero: "", andar: "1º andar", setor: "Clínica Médica", tipo: "Enfermaria" }) }} className="min-h-11 flex-1 rounded-lg border px-4 text-sm font-semibold sm:flex-none" style={{ background: "var(--card)", color: "var(--foreground)", borderColor: "var(--border)" }}>Limpar</button>
                         <button type="submit" disabled={!formLeito.numero.trim() || !formLeito.setor.trim()} className="min-h-11 flex-1 rounded-lg px-5 text-sm font-semibold sm:flex-none" style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}>Cadastrar leito</button>
@@ -1096,7 +1113,7 @@ export default function ReceptionistDashboard({
                   <ul className="space-y-1.5">
                     {[...leitos].reverse().slice(0, 7).map((l) => (
                       <li key={l.id} className="flex items-center gap-3 rounded-xl border p-2.5" style={{ borderColor: "var(--border)" }}>
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-bold" style={{ background: toneStyles[tipoTone(l.tipo)].bg, color: toneStyles[tipoTone(l.tipo)].fg }}>{l.numero}</span>
+                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[10px] font-bold leading-none whitespace-nowrap" style={{ background: toneStyles[tipoTone(l.tipo)].bg, color: toneStyles[tipoTone(l.tipo)].fg }}>{formatBedNumber(l)}</span>
                         <span className="min-w-0 flex-1">
                           <span className="block break-words text-sm font-semibold" style={{ color: "var(--foreground)" }}>{l.setor || l.tipo}</span>
                           <span className="block break-words text-xs" style={{ color: "var(--muted-foreground)" }}>{l.andar} · {l.tipo}</span>
@@ -1200,7 +1217,7 @@ export default function ReceptionistDashboard({
                               <li key={l.id}>
                                 <button
                                   type="button"
-                                  aria-label={`Leito ${l.numero}, ${l.status}${pac ? `, ocupado por ${pac.nome}` : ""}`}
+                                  aria-label={`Leito ${formatBedNumber(l)}, ${l.status}${pac ? `, ocupado por ${pac.nome}` : ""}`}
                                   aria-pressed={selected}
                                   onClick={() => {
                                     setLeitoMapaSelecionadoId(l.id)
@@ -1211,7 +1228,7 @@ export default function ReceptionistDashboard({
                                 >
                                   <span className="absolute inset-x-0 top-0 h-1" style={{ background: toneStyles[tone].solid }} aria-hidden="true" />
                                   <span className="flex items-start justify-between gap-2">
-                                    <span className="text-base font-bold leading-tight" style={{ color: "var(--foreground)" }}>{l.numero}</span>
+                                    <span className="text-base font-bold leading-tight" style={{ color: "var(--foreground)" }}>{formatBedNumber(l)}</span>
                                     <span style={{ color: toneStyles[tone].fg }}><UiIcon name={bedIcon(l.status)} size={16} /></span>
                                   </span>
                                   <span className="mt-0.5 text-[11px]" style={{ color: "var(--muted-foreground)" }}>{l.andar} · <span style={{ color: toneStyles[tipoTone(l.tipo)].fg }}>{l.tipo}</span></span>
@@ -1233,7 +1250,7 @@ export default function ReceptionistDashboard({
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: toneStyles[bedTone(leitoMapaSelecionado.status)].fg }}>Leito selecionado</p>
-                            <h3 id="leito-selecionado-titulo" className="text-2xl font-bold" style={{ color: "var(--foreground)" }}>{leitoMapaSelecionado.numero}</h3>
+                            <h3 id="leito-selecionado-titulo" className="text-2xl font-bold" style={{ color: "var(--foreground)" }}>{formatBedNumber(leitoMapaSelecionado)}</h3>
                           </div>
                           <StatusBadge tone={bedTone(leitoMapaSelecionado.status)} icon={bedIcon(leitoMapaSelecionado.status)} size="sm">{leitoMapaSelecionado.status}</StatusBadge>
                         </div>
@@ -1319,13 +1336,13 @@ export default function ReceptionistDashboard({
                   >
                     <FormSection step={1} title="Paciente e leito">
                       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                        <SelectField label="Paciente" value={formInternacao.pacienteId} onChange={(v) => setFormInternacao({ ...formInternacao, pacienteId: v })} required hint={pacientesDisponiveisParaInternacao.length ? undefined : "Todos os pacientes já possuem leito"}>
+                        <SelectField label="Paciente" value={formInternacao.pacienteId} onChange={(v) => setFormInternacao({ ...formInternacao, pacienteId: v })} required hint={pacientesDisponiveisParaInternacao.length ? undefined : "Todos os pacientes já estão associados a um leito."}>
                           <option value="">Selecione o paciente...</option>
                           {pacientesDisponiveisParaInternacao.map((p) => <option key={p.id} value={p.id}>{p.nome} — {p.id}</option>)}
                         </SelectField>
-                        <SelectField label="Leito disponível" value={formInternacao.leitoId} onChange={(v) => setFormInternacao({ ...formInternacao, leitoId: v })} required hint={leitosDisponiveis.length ? `${leitosDisponiveis.length} leito(s) disponível(is)` : "Nenhum leito disponível"}>
+                        <SelectField label="Leito disponível" value={formInternacao.leitoId} onChange={(v) => setFormInternacao({ ...formInternacao, leitoId: v })} required hint={leitosDisponiveis.length ? `${leitosDisponiveis.length} leito${leitosDisponiveis.length === 1 ? "" : "s"} disponível${leitosDisponiveis.length === 1 ? "" : "is"}` : "Nenhum leito disponível"}>
                           <option value="">Selecione o leito...</option>
-                          {leitosDisponiveis.map((l) => <option key={l.id} value={l.id}>Leito {l.numero} · {l.setor || l.tipo} · {l.andar} · {l.tipo}</option>)}
+                          {leitosDisponiveis.map((l) => <option key={l.id} value={l.id}>Leito {formatBedNumber(l)} · {l.setor || l.tipo} · {l.andar} · {l.tipo}</option>)}
                         </SelectField>
                       </div>
                     </FormSection>
@@ -1333,7 +1350,7 @@ export default function ReceptionistDashboard({
                       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                         <SelectField label="Médico responsável" value={formInternacao.medicoId} onChange={(v) => setFormInternacao({ ...formInternacao, medicoId: v })}>
                           <option value="">Selecione...</option>
-                          {medicosDisponiveis.map((m) => <option key={m.id} value={m.id}>{m.nome} — {m.especialidade}</option>)}
+                          {medicosDisponiveis.map((m) => <option key={m.id} value={m.id}>{m.nome} — {formatSpecialty(m.especialidade)}</option>)}
                         </SelectField>
                         <TextField label="Motivo da internação" value={formInternacao.motivo} onChange={(v) => setFormInternacao({ ...formInternacao, motivo: v })} placeholder="Ex.: Pneumonia bacteriana" required />
                       </div>
@@ -1343,7 +1360,7 @@ export default function ReceptionistDashboard({
                         <p className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--role-strong)" }}>Resumo</p>
                         <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                           <KeyValue label="Paciente" value={pacientesCadastrados.find((p) => p.id === formInternacao.pacienteId)?.nome ?? "—"} />
-                          <KeyValue label="Leito" value={(() => { const bed = leitos.find((l) => l.id === formInternacao.leitoId); return bed ? `${bed.numero} · ${bed.setor || bed.tipo}` : "—" })()} />
+                          <KeyValue label="Leito" value={(() => { const bed = leitos.find((l) => l.id === formInternacao.leitoId); return bed ? `${formatBedNumber(bed)} · ${bed.setor || bed.tipo}` : "—" })()} />
                           <KeyValue label="Médico" value={medicoPorId(formInternacao.medicoId)?.nome ?? "Equipe médica"} />
                         </dl>
                       </div>
@@ -1368,15 +1385,14 @@ export default function ReceptionistDashboard({
                   </form>
                 </SectionCard>
 
-                <SectionCard title="Internados no momento" description={`${pacientesInternados.length} paciente(s)`} icon="internados" bodyClassName="p-3">
+                <SectionCard title="Internados no momento" description={`${pacientesInternados.length} paciente${pacientesInternados.length === 1 ? "" : "s"}`} icon="internados" bodyClassName="p-3">
                   {pacientesInternados.length === 0 && <EmptyState icon="internacao" title="Nenhum paciente internado no momento" />}
                   <ul className="space-y-2">
                     {pacientesInternados.map((pi) => (
                       <li key={pi.leito.id} className="rounded-xl border p-3" style={{ borderColor: "var(--border)" }}>
                         <div className="flex items-start gap-3">
-                          <span className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-lg" style={{ background: "var(--role-soft)", color: "var(--role-strong)" }}>
-                            <span className="text-[10px] font-semibold uppercase leading-none">Leito</span>
-                            <span className="text-sm font-bold leading-tight">{pi.leito.numero}</span>
+                          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[10px] font-bold leading-none whitespace-nowrap" style={{ background: "var(--role-soft)", color: "var(--role-strong)" }}>
+                            {formatBedNumber(pi.leito)}
                           </span>
                           <div className="min-w-0 flex-1">
                             <p className="break-words text-sm font-semibold" style={{ color: "var(--foreground)" }}>{pi.paciente.nome}</p>
@@ -1386,7 +1402,7 @@ export default function ReceptionistDashboard({
                         </div>
                         {altaEmConfirmacaoId === pi.leito.id ? (
                           <div role="alertdialog" aria-label={`Confirmar alta de ${pi.paciente.nome}`} className="mt-3 rounded-lg border p-2.5" style={{ background: "var(--warning-surface)", borderColor: toneStyles.warning.border }}>
-                            <p className="text-xs font-semibold" style={{ color: "var(--warning-foreground)" }}>Confirmar alta? O leito {pi.leito.numero} irá para higienização.</p>
+                            <p className="text-xs font-semibold" style={{ color: "var(--warning-foreground)" }}>Confirmar alta? O leito {formatBedNumber(pi.leito)} será encaminhado para higienização.</p>
                             <div className="mt-2 flex gap-2">
                               <button type="button" onClick={() => setAltaEmConfirmacaoId(null)} className="min-h-9 flex-1 rounded-lg px-3 text-xs font-semibold" style={{ background: "var(--card)", color: "var(--foreground)" }}>Cancelar</button>
                               <button type="button" onClick={() => handleConfirmarAlta(pi.leito.id)} className="min-h-9 flex-1 rounded-lg px-3 text-xs font-semibold" style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}>Confirmar alta</button>
@@ -1430,8 +1446,8 @@ export default function ReceptionistDashboard({
                   >
                     <FormSection step={1} title="Profissional e paciente">
                       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                        <SelectField label="Médico" value={formAgendamento.medicoId} onChange={(v) => setFormAgendamento({ ...formAgendamento, medicoId: v, hora: "" })} required hint={`Especialidade: ${medicoPorId(formAgendamento.medicoId)?.especialidade ?? "—"}`}>
-                          {medicosDisponiveis.map((m) => <option key={m.id} value={m.id}>{m.nome} — {m.especialidade}</option>)}
+                        <SelectField label="Médico" value={formAgendamento.medicoId} onChange={(v) => setFormAgendamento({ ...formAgendamento, medicoId: v, hora: "" })} required hint={`Especialidade: ${formatSpecialty(medicoPorId(formAgendamento.medicoId)?.especialidade ?? "—")}`}>
+                          {medicosDisponiveis.map((m) => <option key={m.id} value={m.id}>{m.nome} — {formatSpecialty(m.especialidade)}</option>)}
                         </SelectField>
                         <SelectField label="Paciente" value={formAgendamento.pacienteId} onChange={(v) => setFormAgendamento({ ...formAgendamento, pacienteId: v })} required>
                           <option value="">Selecione o paciente...</option>
@@ -1538,7 +1554,7 @@ export default function ReceptionistDashboard({
                 <SelectField label="Paciente internado" value={fichaPacienteId} onChange={(v) => { setFichaPacienteId(v); setFichaEnviadaId(null) }}>
                   <option value="">Selecione o paciente...</option>
                   {pacientesInternados.map((pi) => (
-                    <option key={pi.paciente.id} value={pi.paciente.id}>{pi.paciente.nome} — Leito {pi.leito.numero}</option>
+                    <option key={pi.paciente.id} value={pi.paciente.id}>{pi.paciente.nome} - {formatBedNumber(pi.leito)}</option>
                   ))}
                 </SelectField>
               </div>
@@ -1597,7 +1613,7 @@ export default function ReceptionistDashboard({
                     <section className="mt-6">
                       <h2 className="mb-2 text-xs font-bold uppercase tracking-[0.12em]" style={{ color: "var(--role-strong)" }}>2. Dados da internação</h2>
                       {linhas([
-                        ["Leito", leito.numero],
+                        ["Leito", formatBedNumber(leito)],
                         ["Setor", leito.setor || leito.tipo],
                         ["Andar", leito.andar],
                         ["Tipo de leito", leito.tipo],
@@ -1620,7 +1636,7 @@ export default function ReceptionistDashboard({
                     <footer className="no-print mt-8 flex flex-col gap-3 border-t pt-5 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: "var(--border)" }}>
                       <div>{fichaEnviadaId === pac.id && <InlineNotice tone="success">Ficha enviada ao setor {leito.setor || leito.tipo}</InlineNotice>}</div>
                       <div className="flex flex-col gap-2 sm:flex-row">
-                        <button type="button" onClick={() => enviarFicha(pac.id, leito.numero)} disabled={fichaEnviadaId === pac.id} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border px-4 text-sm font-semibold" style={{ background: "var(--card)", color: "var(--foreground)", borderColor: "var(--border)" }}>
+                        <button type="button" onClick={() => enviarFicha(pac.id, formatBedNumber(leito))} disabled={fichaEnviadaId === pac.id} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border px-4 text-sm font-semibold" style={{ background: "var(--card)", color: "var(--foreground)", borderColor: "var(--border)" }}>
                           <UiIcon name="send" size={15} /> Enviar ao setor
                         </button>
                         <button type="button" onClick={() => window.print()} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold" style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}>

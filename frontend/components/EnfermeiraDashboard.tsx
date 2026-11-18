@@ -347,9 +347,10 @@ export default function NurseDashboard({
   const limitePacientesCelular = summaryLimit(filteredPatients.length, 3)
   const totalDoses = pacientes.reduce((total, patient) => total + (prescricoesEquipe[patient.id] ?? []).length, 0)
   const dosesConfirmadas = totalDoses - dosesPendentes.length
-  const hojeCurto = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" }).format(new Date())
+  const hojeCompleto = new Intl.DateTimeFormat("pt-BR").format(new Date())
+  const selectedPatientEvolutionCount = selectedPaciente ? (evolucoesPorPaciente[selectedPaciente.id] ?? []).length : 0
   const evoluiuHoje = (id: string) =>
-    (evolucoesPorPaciente[id] ?? []).some((entry) => entry.perfil === "Enfermagem" && (entry.data.startsWith("Hoje") || entry.data.startsWith(hojeCurto)))
+    (evolucoesPorPaciente[id] ?? []).some((entry) => entry.perfil === "Enfermagem" && (entry.data.startsWith("Hoje") || entry.data.startsWith(hojeCompleto)))
   const evolucoesPendentes = pacientes.filter((patient) => !evoluiuHoje(patient.id))
   const pacientesRisco = pacientes.filter((patient) => getPatientRisk(patient) !== "low").sort((a, b) => (getPatientRisk(a) === "high" ? -1 : 0) - (getPatientRisk(b) === "high" ? -1 : 0))
   const selectPatient = (patient: (typeof pacientes)[number]) => {
@@ -448,16 +449,16 @@ export default function NurseDashboard({
               >
                 <div className="keep-2-cols grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
                   <HeroStat label="Pacientes sob cuidado" value={pacientes.length} hint={`${pacientes.filter((p) => p.prescricaoAtiva).length} com prescrição ativa`} />
-                  <HeroStat label="Medicações pendentes" value={dosesPendentes.length} hint={`${dosesConfirmadas} de ${totalDoses} confirmadas`} />
-                  <HeroStat label="Próxima hora" value={dosesProximas.length} hint="Doses previstas em até 60 min" />
-                  <HeroStat label="Alertas pendentes" value={alertasPendentes.length + monitoringPendingCount} hint="Clínicos e monitoramento" alert={alertasPendentes.length + monitoringPendingCount > 0} />
+                  <HeroStat label="Doses pendentes" value={dosesPendentes.length} hint={`${dosesConfirmadas} de ${totalDoses} confirmadas`} />
+                  <HeroStat label="Próximas doses" value={dosesProximas.length} hint="Previstas para os próximos 60 minutos" />
+                  <HeroStat label="Alertas pendentes" value={alertasPendentes.length + monitoringPendingCount} hint="Alertas clínicos e de monitoramento" alert={alertasPendentes.length + monitoringPendingCount > 0} />
                 </div>
               </HeroHeader>
 
               <div className="mb-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
                 <SectionCard
                   className="lg:col-span-2"
-                  title="Medicações do plantão"
+                  title="Doses do plantão"
                   description="Doses pendentes em ordem de horário"
                   icon="administracao"
                   action={<button type="button" onClick={() => setActiveTab("administracao")} className="min-h-9 rounded-lg px-3 text-xs font-semibold" style={{ background: "var(--secondary)", color: "var(--primary)" }}>Abrir administração</button>}
@@ -488,10 +489,10 @@ export default function NurseDashboard({
                       })}
                     </ul>
                   ) : (
-                    <EmptyState icon="checkCircle" title="Todas as medicações foram confirmadas" description="Nenhuma dose pendente para os pacientes sob cuidado." />
+                    <EmptyState icon="checkCircle" title="Todas as doses foram confirmadas" description="Nenhuma dose pendente para os pacientes sob cuidado." />
                   )}
                   <ShowMoreButton expanded={!!listasExpandidas.doses} onToggle={() => alternarLista("doses")} hiddenCount={Math.min(7, dosesPrioritarias.length) - limiteDosesCelular} controls="lista-doses-plantao" label={["dose", "doses"]} />
-                  {dosesPendentes.length > 7 && <p className="px-2.5 pt-2 text-xs" style={{ color: "var(--muted-foreground)" }}>+ {dosesPendentes.length - 7} dose(s) na tela de administração</p>}
+                  {dosesPendentes.length > 7 && <p className="px-2.5 pt-2 text-xs" style={{ color: "var(--muted-foreground)" }}>+ {dosesPendentes.length - 7} dose{dosesPendentes.length - 7 === 1 ? "" : "s"} na tela de administração</p>}
                 </SectionCard>
 
                 <div className="flex flex-col gap-5">
@@ -571,9 +572,8 @@ export default function NurseDashboard({
                     return (
                       <article key={p.id} className={"flex min-w-0 flex-col overflow-hidden rounded-xl border" + (index >= limitePacientesCelular && !listasExpandidas.pacientes && !patientSearch.trim() ? " max-sm:hidden" : "")} style={{ background: "var(--card)", borderColor: "var(--border)" }}>
                         <div className="flex items-start gap-3 p-4">
-                          <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl" style={{ background: "var(--role-soft)", color: "var(--role-strong)" }}>
-                            <span className="text-[10px] font-semibold uppercase leading-none">Leito</span>
-                            <span className="text-sm font-bold leading-tight">{p.leito}</span>
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-[10px] font-bold leading-none whitespace-nowrap" style={{ background: "var(--role-soft)", color: "var(--role-strong)" }}>
+                            {p.leito}
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-start justify-between gap-2">
@@ -782,13 +782,13 @@ export default function NurseDashboard({
                 subtitle="Registro de enfermagem enviado diretamente ao médico responsável"
                 meta={
                   <>
-                    <MetaItem icon="evolucao" label="Evoluídos hoje" value={`${pacientes.length - evolucoesPendentes.length}/${pacientes.length}`} tone="success" />
+                    <MetaItem icon="evolucao" label="Evoluções registradas hoje" value={`${pacientes.length - evolucoesPendentes.length}/${pacientes.length}`} tone="success" />
                     <MetaItem icon="clock" label="Pendentes" value={evolucoesPendentes.length} tone="warning" />
                   </>
                 }
               />
               <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)]">
-                {renderPatientPicker(filteredPatients, "Pacientes", (p) => `Leito ${p.leito} · ${evoluiuHoje(p.id) ? "evoluído hoje" : "evolução pendente"}`)}
+                {renderPatientPicker(filteredPatients, "Pacientes", (p) => `Leito ${p.leito} · ${evoluiuHoje(p.id) ? "evolução registrada hoje" : "evolução pendente"}`)}
                 {selectedPaciente ? (
                   <div className="flex min-w-0 flex-col gap-5">
                     <section className="overflow-hidden rounded-2xl border" style={{ background: "var(--card)", borderColor: "var(--border)", boxShadow: "var(--shadow-sm)" }} aria-label="Paciente selecionado">
@@ -845,7 +845,7 @@ export default function NurseDashboard({
                       </div>
                     </SectionCard>
 
-                    <SectionCard title="Registros anteriores" description={`${(evolucoesPorPaciente[selectedPaciente.id] ?? []).length} registro(s)`} icon="atividades">
+                    <SectionCard title="Registros anteriores" description={`${selectedPatientEvolutionCount} registro${selectedPatientEvolutionCount === 1 ? "" : "s"}`} icon="atividades">
                       {(evolucoesPorPaciente[selectedPaciente.id] ?? []).length ? (
                         <ol>
                           {(evolucoesPorPaciente[selectedPaciente.id] ?? []).map((rc, i, list) => (

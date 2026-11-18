@@ -6,6 +6,7 @@ import { logActivity } from "./activityStore"
 import type { Theme } from "./ThemeToggle"
 import { PageTitle } from "./ui"
 import { api, ApiError, type ApiRole, type AuthSession, type StaffMember, type StaffPayload } from "../services/api"
+import { formatSpecialty } from "../services/mappers"
 import { usePanelRoute } from "../hooks/usePanelRoute"
 
 interface Props { session: AuthSession; onLogout: () => void; theme: Theme; onToggleTheme: () => void }
@@ -182,7 +183,7 @@ export default function AdminDashboard({ session, onLogout, theme, onToggleTheme
           </div>
           {loading ? <p className="p-6 text-sm" style={{ color: "var(--muted-foreground)" }}>Carregando funcionários…</p> : staff.length === 0 ? <p className="p-6 text-sm" style={{ color: "var(--muted-foreground)" }}>Nenhum funcionário cadastrado.</p> : <div className="divide-y" style={{ borderColor: "var(--border)" }}>
             {staff.map((member) => <article key={member.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0"><h3 className="truncate text-sm font-semibold" style={{ color: "var(--foreground)" }}>{member.nome}</h3><p className="truncate text-xs" style={{ color: "var(--muted-foreground)" }}>{member.email} · {roleLabel[member.role]} · Matrícula {member.matricula}</p><p className="mt-1 text-xs" style={{ color: "var(--muted-foreground)" }}>{member.role === "MEDICO" ? `${member.crm} · ${member.especialidade}` : member.role === "ENFERMEIRA" ? `${member.coren} · ${member.setor}` : member.setor}</p></div>
+              <div className="min-w-0"><h3 className="truncate text-sm font-semibold" style={{ color: "var(--foreground)" }}>{member.nome}</h3><p className="truncate text-xs" style={{ color: "var(--muted-foreground)" }}>{member.email} · {roleLabel[member.role]} · Matrícula {member.matricula}</p><p className="mt-1 text-xs" style={{ color: "var(--muted-foreground)" }}>{member.role === "MEDICO" ? `${member.crm ?? "—"} · ${formatSpecialty(member.especialidade ?? "—")}` : member.role === "ENFERMEIRA" ? `${member.coren} · ${member.setor}` : member.setor}</p></div>
               <div className="flex shrink-0 gap-2"><button type="button" onClick={() => beginEdit(member)} className="min-h-10 rounded-lg border px-3 text-xs font-semibold" style={{ borderColor: "var(--border)", color: "var(--foreground)" }}>Editar</button><button type="button" onClick={() => void remove(member)} className="min-h-10 rounded-lg px-3 text-xs font-semibold" style={{ background: "var(--danger-surface)", color: "var(--danger-foreground)" }}>Excluir</button></div>
             </article>)}
           </div>}

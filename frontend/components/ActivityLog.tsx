@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { api, ApiError, type ActivityDto, type ApiRole } from "../services/api"
+import { formatBedNumber, mapBed } from "../services/mappers"
 import { EmptyState, PageTitle } from "./ui"
 
 interface Props {
@@ -13,6 +14,44 @@ const roleLabels: Record<ApiRole, string> = {
   MEDICO: "Médico",
   ENFERMEIRA: "Enfermeira",
 }
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value))
+}
+
+function formatBedReferences(value: string | null, bedNumbers: Map<string, string>) {
+  if (!value) return value
+  let formatted = value
+  for (const [storedNumber, displayNumber] of bedNumbers) {
+    formatted = formatted.split(storedNumber).join(displayNumber)
+  }
+  return formatted
+}
+
+export default function ActivityLog({ token, role }: Props) {
+  const [records, setRecords] = useState<ActivityDto[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
+
+  useEffect(() => {
+    let current = true
+    setLoading(true)
+    Promise.all([api.listActivities(token), api.listBeds(token)])
+      .then(([items, beds]) => {
+        if (!current) return
+        const bedNumbers = new Map(beds.map((bed) => [bed.numero, formatBedNumber(mapBed(bed))]))
+        setRecords(items.map((item) => ({
+          ...item,
+          entidade: formatBedReferences(item.entidade, bedNumbers) ?? item.entidade,
+          detalhes: formatBedReferences(item.detalhes, bedNumbers),
+        })))
+        setError("")
+      })
+      .catch((cause) => { if (current) setError(cause instanceof ApiError ? cause.message : "Não foi possível carregar as atividades.") })
+      .finally(() => { if (current) setLoading(false) })
+    return () => { current = false }
+  }, [token])
+
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value))

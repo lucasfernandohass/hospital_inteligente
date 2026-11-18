@@ -204,7 +204,7 @@ export default function DashboardSidebar({
     <div className="border-t p-3" style={{ borderColor: "var(--nav-border)" }}>
       <div className="flex items-center gap-3 rounded-xl px-2 py-2">
         <div
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-bold leading-none text-white"
           style={{ background: "linear-gradient(135deg, #1E4F86, #00A6A6)" }}
           aria-hidden="true"
         >

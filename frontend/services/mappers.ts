@@ -15,6 +15,11 @@ export function formatApiDate(date: string) {
   return `${day}/${month}/${year}`
 }
 
+export function formatSpecialty(specialty: string) {
+  const normalized = specialty.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase()
+  return normalized === "clinica medica" ? "Clínica Médica" : specialty
+}
+
 export const mapPatient = (patient: PatientDto): RegisteredPatient => ({
   id: String(patient.id), nome: patient.nome, cpf: formatCpf(patient.cpf), dataNasc: formatApiDate(patient.dataNascimento),
   telefone: patient.telefone ?? "", convenio: patient.convenio, sexo: patient.sexo ?? "",
@@ -37,11 +42,22 @@ export function mapBed(bed: BedDto, internments: InternmentDto[] = []): Register
   }
 }
 
+export function formatBedNumber(bed: Pick<RegisteredBed, "numero" | "setor">): string {
+  const numero = bed.numero.match(/(\d+)$/)?.[1]
+  if (!numero) return bed.numero
+  const setor = bed.setor.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+  const prefixo = setor.trim().toUpperCase() === "UTI"
+    ? "UTI"
+    : setor.split(/[^a-zA-Z0-9]+/).filter(Boolean).map((parte) => parte[0]).join("").toUpperCase()
+  return prefixo ? `${prefixo}-${numero.padStart(2, "0")}` : bed.numero
+}
+
 export function mapInternment(internment: InternmentDto, beds: BedDto[], doctors: { id: number; nome: string }[] = []): Hospitalization {
   const bed = beds.find((item) => item.id === internment.leitoId)
+  const mappedBed = bed ? mapBed(bed, [internment]) : undefined
   return {
     id: String(internment.id), pacienteId: String(internment.pacienteId), leitoId: String(internment.leitoId),
-    leito: bed?.numero ?? String(internment.leitoId), setor: bed?.tipo ?? "",
+    leito: mappedBed ? formatBedNumber(mappedBed) : String(internment.leitoId), setor: bed?.setor ?? bed?.tipo ?? "",
     motivo: internment.motivo, medicoId: String(internment.medicoId ?? ""), medico: doctors.find((doctor) => doctor.id === internment.medicoId)?.nome ?? "Equipe médica",
     dataEntrada: formatApiDate(internment.dataInternacao),
     dataAltaPrevista: internment.dataPrevistaAlta ? formatApiDate(internment.dataPrevistaAlta) : "A definir",
