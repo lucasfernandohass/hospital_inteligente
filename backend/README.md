@@ -327,3 +327,63 @@ client.activate();
 Somente usuários autenticados com as roles `ADMINISTRADOR`, `RECEPCIONISTA`, `MEDICO` ou `ENFERMEIRA` podem se inscrever em tópicos de pacientes. Clientes não podem publicar mensagens STOMP. A origem permitida padrão é `http://localhost:5173`; ajuste `WEBSOCKET_ALLOWED_ORIGINS` para origens adicionais, separadas por vírgula.
 
 Antes de abrir o WebSocket, o painel pode carregar os valores atuais por `GET /api/pacientes/{pacienteId}/sinais-vitais/atuais`, usando `Authorization: Bearer <token>`. Essa resposta vem da memória da instância. Para produção com múltiplas instâncias, será necessário trocar o broker simples por um broker relay e compartilhar o estado mais recente em uma infraestrutura comum (por exemplo, Redis). Se também for necessário histórico clínico, persista medições selecionadas ou agregadas separadamente, conforme a política clínica.
+
+## Testes
+
+Os testes estão em `backend/hospital-api/src/test/java`.
+
+### Executar a verificação padrão
+
+Na pasta `backend/hospital-api`, execute:
+
+```powershell
+.\mvnw.cmd clean verify
+```
+
+Linux, macOS ou Git Bash:
+
+```bash
+./mvnw clean verify
+```
+
+A execução padrão usa H2 em memória com compatibilidade PostgreSQL para os testes Spring. Os testes unitários e o teste de carregamento do contexto são executados, e os testes de integração com nome `*IT` são ignorados quando as variáveis isoladas de QA não estão configuradas.
+
+Não é necessário iniciar o PostgreSQL do Docker para esta verificação padrão. O Maven utiliza o banco H2 apenas durante os testes e não altera o banco do ambiente local.
+
+Os resultados ficam em `backend/hospital-api/target/surefire-reports` para testes unitários e em `target/failsafe-reports` para integrações. O relatório de cobertura fica em `target/site/jacoco`.
+
+### Executar a suíte QA com PostgreSQL descartável
+
+Os testes Spring isolados exigem PostgreSQL 17. O script [`run-backend.ps1`](../docs/qa/run-backend.ps1) cria um cluster temporário, escolhe uma porta livre e encerra a instância ao final da execução.
+
+```powershell
+$qa = @{
+    Jdk21 = 'C:\caminho\para\jdk-21'
+    PostgresBin = 'C:\Program Files\PostgreSQL\17\bin'
+    MavenRepository = (Join-Path $env:LOCALAPPDATA 'hospital-qa-maven')
+}
+
+..\..\docs\qa\run-backend.ps1 @qa -Suite baseline
+..\..\docs\qa\run-backend.ps1 @qa -Suite auth
+..\..\docs\qa\run-backend.ps1 @qa -Suite stage2
+..\..\docs\qa\run-backend.ps1 @qa -Suite stage3
+..\..\docs\qa\run-backend.ps1 @qa -Suite verify
+```
+
+Execute os comandos a partir de `backend/hospital-api`. As suites disponíveis são:
+
+| Suite | Uso |
+|---|---|
+| `baseline` | Contexto Spring e testes unitários principais |
+| `auth` | Autorização HTTP 401 |
+| `stage2` | WebSocket/STOMP e operações de internação/leito |
+| `stage3` | Permissões, fluxos clínicos e auditoria |
+| `stage3-scope` | Escopo assistencial isolado |
+| `demo` | Integração com o simulador Laravel |
+| `verify` | Todas as suítes Surefire e Failsafe |
+
+O script cria as variáveis `HOSPITAL_QA_*`; elas são usadas pelo `QaDatabaseInitializer` para validar que o Spring está conectado ao PostgreSQL da execução atual.
+
+Adicione `-Offline` ao chamar o script quando o cache Maven já estiver completo.
+
+Detalhes dos cenários, requisitos e decisões pendentes estão na documentação de [QA do backend](../docs/qa/README.md).

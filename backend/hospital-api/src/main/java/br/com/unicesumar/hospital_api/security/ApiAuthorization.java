@@ -32,7 +32,9 @@ public class ApiAuthorization {
     private boolean pode(Authentication auth, String recurso, boolean escrita) {
         if (auth == null || !auth.isAuthenticated()) return false;
         if (auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMINISTRADOR"))) return true;
-        if (escrita && Set.of("pacientes", "atendimentos", "agendamentos", "agendas-medicas", "leitos", "internacoes", "fichas-atendimento").contains(recurso))
+        if (escrita && Set.of("agendamentos", "agendas-medicas").contains(recurso))
+            return auth.getAuthorities().stream().anyMatch(a -> LEITURA.get(recurso).contains(a.getAuthority()));
+        if (escrita && Set.of("pacientes", "atendimentos", "leitos", "internacoes", "fichas-atendimento").contains(recurso))
             return auth.getAuthorities().stream().anyMatch(a -> Set.of("ROLE_RECEPCIONISTA", "ROLE_MEDICO", "ROLE_ENFERMEIRA").contains(a.getAuthority()));
         if (escrita && Set.of("medicamentos", "prescricoes", "itens-prescricao", "exames-imagem", "exames-laboratoriais", "ecgs", "resultados-exame", "registros-clinicos").contains(recurso))
             return auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_MEDICO"));

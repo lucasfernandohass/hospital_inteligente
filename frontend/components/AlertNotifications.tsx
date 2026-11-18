@@ -113,7 +113,11 @@ export default function AlertNotifications({ alerts, profile, onOpenAlerts }: Pr
   if (notifications.length === 0) return null
 
   // Mais graves primeiro; entre iguais, os mais recentes
-  const ordered = [...notifications].sort((a, b) => severityRank[b.alert.severity] - severityRank[a.alert.severity] || notifications.indexOf(b) - notifications.indexOf(a))
+  const activeKeys = new Set(alerts.map((alert) => alert.key))
+  const ordered = notifications
+    .filter(({ alert }) => alert.key !== `${alert.patientId}:device-offline` || activeKeys.has(alert.key))
+    .sort((a, b) => severityRank[b.alert.severity] - severityRank[a.alert.severity] || notifications.indexOf(b) - notifications.indexOf(a))
+  if (ordered.length === 0) return null
   const visible = ordered.slice(0, isMobile ? 1 : DESKTOP_VISIBLE)
   const hidden = ordered.length - visible.length
   const openCenter = () => {

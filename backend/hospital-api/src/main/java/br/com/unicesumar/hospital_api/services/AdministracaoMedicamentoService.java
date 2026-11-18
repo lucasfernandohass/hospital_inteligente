@@ -9,7 +9,16 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class AdministracaoMedicamentoService extends AbstractDomainService<AdministracaoMedicamento, DomainRequestDTOs.AdministracaoMedicamento, DomainResponseDTOs.AdministracaoMedicamento> {
-    public AdministracaoMedicamentoService(AdministracaoMedicamentoRepository repository, ObjectMapper mapper) {
+    private final VinculosClinicos vinculos;
+
+    public AdministracaoMedicamentoService(AdministracaoMedicamentoRepository repository, ObjectMapper mapper, VinculosClinicos vinculos) {
         super(repository, mapper, AdministracaoMedicamento.class, DomainResponseDTOs.AdministracaoMedicamento.class, "administracoes-medicamento");
+        this.vinculos = vinculos;
+    }
+
+    @Override
+    protected AdministracaoMedicamento toEntity(DomainRequestDTOs.AdministracaoMedicamento request) {
+        vinculos.validarPacienteDaPrescricao(request.pacienteId(), request.itemPrescricaoId());
+        return super.toEntity(request);
     }
 }

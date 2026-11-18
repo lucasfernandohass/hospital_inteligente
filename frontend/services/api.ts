@@ -1,4 +1,6 @@
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080").replace(/\/$/, "")
+const API_TIMEOUT_MS = 12_000
+const CONNECTION_ERROR = "Não foi possível conectar à API. Confira se o backend está em execução."
 
 export type ApiRole = "RECEPCIONISTA" | "MEDICO" | "ENFERMEIRA" | "ADMINISTRADOR"
 
@@ -108,23 +110,33 @@ async function request<T>(path: string, options: RequestInit = {}, token?: strin
   if (options.body) headers.set("Content-Type", "application/json")
   if (token) headers.set("Authorization", `Bearer ${token}`)
 
-  let response: Response
+  const timeout = new AbortController()
+  const timer = setTimeout(() => timeout.abort(), API_TIMEOUT_MS)
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers })
-  } catch {
-    throw new ApiError("Não foi possível conectar à API. Confira se o backend está em execução.", 0)
-  }
-
-  if (!response.ok) {
-    let message = `Falha na requisição (${response.status}).`
+    const signal = options.signal ? AbortSignal.any([options.signal, timeout.signal]) : timeout.signal
+    let response: Response
     try {
-      const body = await response.json() as { detail?: string; message?: string; title?: string }
-      message = body.detail ?? body.message ?? body.title ?? message
-    } catch { /* resposta sem corpo JSON */ }
-    throw new ApiError(message, response.status)
+      response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers, signal })
+    } catch {
+      throw new ApiError(CONNECTION_ERROR, 0)
+    }
+
+    if (!response.ok) {
+      let message = `Falha na requisição (${response.status}).`
+      try {
+        const body = await response.json() as { detail?: string; message?: string; title?: string }
+        message = body.detail ?? body.message ?? body.title ?? message
+      } catch { /* resposta sem corpo JSON */ }
+      throw new ApiError(message, response.status)
+    }
+    if (response.status === 204) return undefined as T
+    return await response.json() as T
+  } catch (cause) {
+    if (timeout.signal.aborted) throw new ApiError(CONNECTION_ERROR, 0)
+    throw cause
+  } finally {
+    clearTimeout(timer)
   }
-  if (response.status === 204) return undefined as T
-  return response.json() as Promise<T>
 }
 
 export const api = {

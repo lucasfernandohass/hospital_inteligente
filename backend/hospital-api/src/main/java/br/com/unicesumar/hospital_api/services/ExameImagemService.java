@@ -9,7 +9,16 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class ExameImagemService extends AbstractDomainService<ExameImagem, DomainRequestDTOs.ExameImagem, DomainResponseDTOs.ExameImagem> {
-    public ExameImagemService(ExameImagemRepository repository, ObjectMapper mapper) {
+    private final VinculosClinicos vinculos;
+
+    public ExameImagemService(ExameImagemRepository repository, ObjectMapper mapper, VinculosClinicos vinculos) {
         super(repository, mapper, ExameImagem.class, DomainResponseDTOs.ExameImagem.class, "exames-imagem");
+        this.vinculos = vinculos;
+    }
+
+    @Override
+    protected ExameImagem toEntity(DomainRequestDTOs.ExameImagem request) {
+        vinculos.validarPacienteDoAtendimento(request.pacienteId(), request.atendimentoId());
+        return super.toEntity(request);
     }
 }
