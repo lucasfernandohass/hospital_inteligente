@@ -3,9 +3,11 @@ package br.com.unicesumar.hospital_api.exception;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -51,6 +53,11 @@ public class GlobalExceptionHandler {
     
     @ExceptionHandler(IllegalStateException.class)
     ProblemDetail estadoInvalido(IllegalStateException e) { return detalhe(HttpStatus.CONFLICT, e.getMessage()); }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    ResponseEntity<ProblemDetail> metodoNaoPermitido(HttpRequestMethodNotSupportedException e) {
+        return new ResponseEntity<>(e.getBody(), e.getHeaders(), e.getStatusCode());
+    }
     
     @ExceptionHandler(Exception.class)
     ProblemDetail inesperado(Exception e, HttpServletRequest request) {

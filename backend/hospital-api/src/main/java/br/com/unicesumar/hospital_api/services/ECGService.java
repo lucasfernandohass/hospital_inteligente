@@ -9,7 +9,16 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class ECGService extends AbstractDomainService<ECG, DomainRequestDTOs.ECG, DomainResponseDTOs.ECG> {
-    public ECGService(ECGRepository repository, ObjectMapper mapper) {
+    private final VinculosClinicos vinculos;
+
+    public ECGService(ECGRepository repository, ObjectMapper mapper, VinculosClinicos vinculos) {
         super(repository, mapper, ECG.class, DomainResponseDTOs.ECG.class, "ecgs");
+        this.vinculos = vinculos;
+    }
+
+    @Override
+    protected ECG toEntity(DomainRequestDTOs.ECG request) {
+        vinculos.validarPacienteDoAtendimento(request.pacienteId(), request.atendimentoId());
+        return super.toEntity(request);
     }
 }
