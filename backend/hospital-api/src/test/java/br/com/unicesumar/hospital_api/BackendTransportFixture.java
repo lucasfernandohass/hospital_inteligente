@@ -99,7 +99,7 @@ abstract class BackendTransportFixture {
                 """.formatted(paciente, medida);
         return http.send(HttpRequest.newBuilder(uri("/api/ingestao/sinais-vitais"))
                 .timeout(Duration.ofSeconds(10)).header("Content-Type", "application/json")
-                .header("X-Monitor-Api-Key", System.getenv("HOSPITAL_QA_MONITOR_KEY"))
+                .header("X-Monitor-Api-Key", QaDatabaseInitializer.monitorKey())
                 .POST(HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
     }
 

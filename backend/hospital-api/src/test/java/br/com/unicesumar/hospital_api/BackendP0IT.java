@@ -70,7 +70,7 @@ class BackendP0IT {
     @Test
     void retorna401ParaRequisicaoComTokenExpirado() throws Exception {
         criarAdmin();
-        var key = Keys.hmacShaKeyFor(Base64.getDecoder().decode(System.getenv("HOSPITAL_QA_JWT")));
+        var key = Keys.hmacShaKeyFor(Base64.getDecoder().decode(QaDatabaseInitializer.jwtSecret()));
         String expirado = Jwts.builder().subject(ADMIN_EMAIL)
                 .expiration(Date.from(Instant.now().minusSeconds(60))).signWith(key).compact();
         verificarNaoAutenticado(mvc.perform(get(PADRAO).header("Authorization", bearer(expirado))));
@@ -171,7 +171,7 @@ class BackendP0IT {
     }
 
     private ResultActions ingerir(String body) throws Exception {
-        return json(post(INGESTAO).header("X-Monitor-Api-Key", System.getenv("HOSPITAL_QA_MONITOR_KEY")), body);
+        return json(post(INGESTAO).header("X-Monitor-Api-Key", QaDatabaseInitializer.monitorKey()), body);
     }
 
     private ResultActions json(MockHttpServletRequestBuilder request, String body) throws Exception {
