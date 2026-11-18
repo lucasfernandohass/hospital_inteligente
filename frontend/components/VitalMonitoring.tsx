@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react"
 import { logActivity } from "./activityStore"
 import { PageTitle } from "./ui"
 import type { LiveVitalReading } from "../hooks/useVitalFeed"
+import { ApiError, api, type VitalThresholdsDto, type VitalThresholdValues } from "../services/api"
+import { defaultVitalThresholds, valuesFromVitalThresholds } from "../services/vitalThresholds"
 
 interface MonitoredPatient {
   id: string
@@ -25,6 +27,7 @@ interface VitalSample {
 interface MonitorRecord extends MonitoredPatient, VitalSample {
   connected: boolean
   available: string[]
+  systolic?: number
   ecgAbnormal: boolean
   deviceName: string
   deviceId: string
@@ -32,6 +35,7 @@ interface MonitorRecord extends MonitoredPatient, VitalSample {
 }
 
 interface Props {
+  token: string
   patients: MonitoredPatient[]
   liveVitals: Record<string, LiveVitalReading>
   profile: "Médico" | "Enfermagem"
@@ -54,14 +58,6 @@ export interface MonitoringAlert {
 }
 
 type Filter = "all" | "attention" | "normal" | "offline"
-type Thresholds = {
-  heartRateMin: number
-  heartRateMax: number
-  oxygenMin: number
-  respirationMax: number
-  temperatureMax: number
-}
-
 interface TriggeredEvent {
   id: string
   label: string
@@ -85,13 +81,20 @@ interface Occurrence {
   acknowledged: boolean
 }
 
-const defaultThresholds: Thresholds = {
-  heartRateMin: 50,
-  heartRateMax: 110,
-  oxygenMin: 92,
-  respirationMax: 24,
-  temperatureMax: 38,
-}
+const thresholdFields: { key: keyof VitalThresholdValues; label: string; step: number }[] = [
+  { key: "fcAlertaMin", label: "FC mínima · alerta (bpm)", step: 1 },
+  { key: "fcAlertaMax", label: "FC máxima · alerta (bpm)", step: 1 },
+  { key: "fcCriticoMin", label: "FC mínima · crítico (bpm)", step: 1 },
+  { key: "fcCriticoMax", label: "FC máxima · crítico (bpm)", step: 1 },
+  { key: "spo2AlertaMin", label: "SpO₂ mínima · alerta (%)", step: 0.1 },
+  { key: "spo2CriticoMin", label: "SpO₂ mínima · crítico (%)", step: 0.1 },
+  { key: "frAlertaMax", label: "FR máxima · alerta (rpm)", step: 1 },
+  { key: "frCriticoMax", label: "FR máxima · crítico (rpm)", step: 1 },
+  { key: "temperaturaAlertaMax", label: "Temperatura máxima · alerta (°C)", step: 0.1 },
+  { key: "temperaturaCriticoMax", label: "Temperatura máxima · crítico (°C)", step: 0.1 },
+  { key: "paSistolicaAlertaMax", label: "Pressão sistólica máxima · alerta (mmHg)", step: 1 },
+  { key: "paSistolicaCriticoMax", label: "Pressão sistólica máxima · crítico (mmHg)", step: 1 },
+]
 
 const dateTimeClock = () =>
   new Intl.DateTimeFormat("pt-BR", {
@@ -99,8 +102,19 @@ const dateTimeClock = () =>
     timeStyle: "medium",
   }).format(new Date())
 
-function hasAttention(record: MonitorRecord, thresholds: Thresholds) {
+function hasAttention(record: MonitorRecord, thresholds: VitalThresholdValues) {
   return getTriggeredEvents(record, thresholds).length > 0
+}
+
+function getThresholdEvents(record: MonitorRecord, thresholds: VitalThresholdValues): TriggeredEvent[] {
+  const events: TriggeredEvent[] = []
+  if (record.available.includes("heartRate") && record.heartRate < thresholds.fcAlertaMin) events.push({ id: "heart-rate-low", label: "Frequência cardíaca abaixo do limite", value: record.heartRate + " bpm", limit: "mínimo " + thresholds.fcAlertaMin + " bpm" })
+  if (record.available.includes("heartRate") && record.heartRate > thresholds.fcAlertaMax) events.push({ id: "heart-rate-high", label: "Frequência cardíaca acima do limite", value: record.heartRate + " bpm", limit: "máximo " + thresholds.fcAlertaMax + " bpm" })
+  if (record.available.includes("oxygen") && record.oxygen < thresholds.spo2AlertaMin) events.push({ id: "oxygen-low", label: "Saturação abaixo do limite", value: record.oxygen.toFixed(1) + "%", limit: "mínimo " + thresholds.spo2AlertaMin + "%" })
+  if (record.available.includes("respiration") && record.respiration > thresholds.frAlertaMax) events.push({ id: "respiration-high", label: "Frequência respiratória acima do limite", value: record.respiration + " rpm", limit: "máximo " + thresholds.frAlertaMax + " rpm" })
+  if (record.available.includes("temperature") && record.temperature >= thresholds.temperaturaAlertaMax) events.push({ id: "temperature-high", label: "Temperatura acima do limite", value: record.temperature.toFixed(1) + " °C", limit: "máximo " + thresholds.temperaturaAlertaMax + " °C" })
+  if (record.available.includes("systolic") && record.systolic !== undefined && record.systolic > thresholds.paSistolicaAlertaMax) events.push({ id: "systolic-high", label: "Pressão sistólica acima do limite", value: record.systolic + " mmHg", limit: "máximo " + thresholds.paSistolicaAlertaMax + " mmHg" })
+  return events
 }
 
 function getTrendEvents(record: MonitorRecord): TriggeredEvent[] {
@@ -122,29 +136,35 @@ function getTrendEvents(record: MonitorRecord): TriggeredEvent[] {
   return trends
 }
 
-function getTriggeredEvents(record: MonitorRecord, thresholds: Thresholds) {
-  const events: TriggeredEvent[] = []
+function getTriggeredEvents(record: MonitorRecord, thresholds: VitalThresholdValues) {
   if (!record.connected) return [{ id: "device-offline", label: "Dispositivo sem comunicação", value: record.deviceId, limit: "última leitura há menos de 15 segundos" }]
-  if (record.available.includes("heartRate") && record.heartRate < thresholds.heartRateMin) events.push({ id: "heart-rate-low", label: "Frequência cardíaca abaixo do limite", value: record.heartRate + " bpm", limit: "mínimo " + thresholds.heartRateMin + " bpm" })
-  if (record.available.includes("heartRate") && record.heartRate > thresholds.heartRateMax) events.push({ id: "heart-rate-high", label: "Frequência cardíaca acima do limite", value: record.heartRate + " bpm", limit: "máximo " + thresholds.heartRateMax + " bpm" })
-  if (record.available.includes("oxygen") && record.oxygen < thresholds.oxygenMin) events.push({ id: "oxygen-low", label: "Saturação abaixo do limite", value: record.oxygen.toFixed(1) + "%", limit: "mínimo " + thresholds.oxygenMin + "%" })
-  if (record.available.includes("respiration") && record.respiration > thresholds.respirationMax) events.push({ id: "respiration-high", label: "Frequência respiratória acima do limite", value: record.respiration + " rpm", limit: "máximo " + thresholds.respirationMax + " rpm" })
-  if (record.available.includes("temperature") && record.temperature >= thresholds.temperatureMax) events.push({ id: "temperature-high", label: "Temperatura acima do limite", value: record.temperature.toFixed(1) + " °C", limit: "máximo " + thresholds.temperatureMax + " °C" })
-  return [...events, ...getTrendEvents(record)]
+  return [...getThresholdEvents(record, thresholds), ...getTrendEvents(record)]
 }
 
-function isCritical(record: MonitorRecord) {
-  return (record.available.includes("heartRate") && (record.heartRate < 40 || record.heartRate > 130)) || (record.available.includes("oxygen") && record.oxygen < 88) || (record.available.includes("respiration") && record.respiration > 30) || (record.available.includes("temperature") && record.temperature >= 39)
+function isCritical(record: MonitorRecord, thresholds: VitalThresholdValues) {
+  return (record.available.includes("heartRate") && (record.heartRate < thresholds.fcCriticoMin || record.heartRate > thresholds.fcCriticoMax)) || (record.available.includes("oxygen") && record.oxygen < thresholds.spo2CriticoMin) || (record.available.includes("respiration") && record.respiration > thresholds.frCriticoMax) || (record.available.includes("temperature") && record.temperature >= thresholds.temperaturaCriticoMax) || (record.available.includes("systolic") && record.systolic !== undefined && record.systolic > thresholds.paSistolicaCriticoMax)
 }
 
-function eventSeverity(record: MonitorRecord, eventId: string): MonitoringAlert["severity"] {
+function getMonitorStatus(record: MonitorRecord, thresholds: VitalThresholdValues): "critical" | "alert" | "stable" {
+  if (record.connected && isCritical(record, thresholds)) return "critical"
+  if (!record.connected || getThresholdEvents(record, thresholds).length > 0) return "alert"
+  return "stable"
+}
+
+function eventSeverity(record: MonitorRecord, eventId: string, thresholds: VitalThresholdValues): MonitoringAlert["severity"] {
   if (eventId.startsWith("trend-")) return "Informativo"
   const critical =
-    (eventId.startsWith("heart-rate-") && (record.heartRate < 40 || record.heartRate > 130)) ||
-    (eventId === "oxygen-low" && record.oxygen < 88) ||
-    (eventId === "respiration-high" && record.respiration > 30) ||
-    (eventId === "temperature-high" && record.temperature >= 39)
+    (eventId === "heart-rate-low" && record.heartRate < thresholds.fcCriticoMin) ||
+    (eventId === "heart-rate-high" && record.heartRate > thresholds.fcCriticoMax) ||
+    (eventId === "oxygen-low" && record.oxygen < thresholds.spo2CriticoMin) ||
+    (eventId === "respiration-high" && record.respiration > thresholds.frCriticoMax) ||
+    (eventId === "temperature-high" && record.temperature >= thresholds.temperaturaCriticoMax) ||
+    (eventId === "systolic-high" && record.systolic !== undefined && record.systolic > thresholds.paSistolicaCriticoMax)
   return critical ? "Crítico" : "Moderado"
+}
+
+function thresholdValues(config: VitalThresholdsDto | undefined, defaults: VitalThresholdValues) {
+  return config ? valuesFromVitalThresholds(config) : defaults
 }
 
 function makeRecords(patients: MonitoredPatient[]): MonitorRecord[] {
@@ -191,16 +211,43 @@ function Metric({ label, short, value, unit, color, alarm = false, offline = fal
   )
 }
 
-export default function VitalMonitoring({ patients, liveVitals, profile, acknowledgedAlerts, setAcknowledgedAlerts, onAlertsChange }: Props) {
+export default function VitalMonitoring({ token, patients, liveVitals, profile, acknowledgedAlerts, setAcknowledgedAlerts, onAlertsChange }: Props) {
   const [records, setRecords] = useState(() => makeRecords(patients))
   const patientIdsKey = patients.map((patient) => patient.id).join("|")
   const activePatientIds = useMemo(() => new Set(patientIdsKey ? patientIdsKey.split("|") : []), [patientIdsKey])
-  const [thresholds, setThresholds] = useState(defaultThresholds)
+  const [defaultThresholds, setDefaultThresholds] = useState(defaultVitalThresholds)
+  const [thresholdsByPatient, setThresholdsByPatient] = useState<Record<string, VitalThresholdsDto>>({})
+  const [thresholdDraft, setThresholdDraft] = useState<{ patientId: string; values: VitalThresholdValues } | null>(null)
+  const [thresholdLoading, setThresholdLoading] = useState(true)
+  const [thresholdSaving, setThresholdSaving] = useState(false)
+  const [thresholdError, setThresholdError] = useState("")
+  const [thresholdMessage, setThresholdMessage] = useState("")
   const [filter, setFilter] = useState<Filter>("all")
   const [query, setQuery] = useState("")
   const [selectedId, setSelectedId] = useState(patients[0]?.id ?? "")
   const [showAllHistory, setShowAllHistory] = useState(false)
   const [occurrences, setOccurrences] = useState<Occurrence[]>([])
+
+  useEffect(() => {
+    let current = true
+    const patientIds = patientIdsKey ? patientIdsKey.split("|") : []
+    setThresholdLoading(true)
+    setThresholdError("")
+    Promise.all([
+      api.getDefaultVitalThresholds(token),
+      Promise.all(patientIds.map((id) => api.getPatientVitalThresholds(Number(id), token))),
+    ])
+      .then(([defaults, configs]) => {
+        if (!current) return
+        setDefaultThresholds(valuesFromVitalThresholds(defaults))
+        setThresholdsByPatient(Object.fromEntries(patientIds.map((id, index) => [id, configs[index]])))
+      })
+      .catch((cause) => {
+        if (current) setThresholdError(cause instanceof ApiError ? cause.message : "Não foi possível carregar os limites dos sinais vitais.")
+      })
+      .finally(() => { if (current) setThresholdLoading(false) })
+    return () => { current = false }
+  }, [patientIdsKey, token])
 
   useEffect(() => {
     setRecords((current) => {
@@ -223,6 +270,11 @@ export default function VitalMonitoring({ patients, liveVitals, profile, acknowl
   }, [activePatientIds, patients])
 
   useEffect(() => {
+    setThresholdError("")
+    setThresholdMessage("")
+  }, [selectedId])
+
+  useEffect(() => {
     const now = Date.now()
     setRecords((current) => {
       const next = patients.map((patient) => {
@@ -231,16 +283,17 @@ export default function VitalMonitoring({ patients, liveVitals, profile, acknowl
       const captured = reading?.capturedAt ? new Date(reading.capturedAt).getTime() : 0
       const history: VitalSample[] = (reading?.history ?? []).map((sample) => ({ ...sample }))
       return { ...record, ...patient, connected: captured > 0 && now - captured < 15000,
-        available: [reading?.heartRate !== undefined ? "heartRate" : "", reading?.oxygen !== undefined ? "oxygen" : "", reading?.respiration !== undefined ? "respiration" : "", reading?.temperature !== undefined ? "temperature" : ""].filter(Boolean),
+        available: [reading?.heartRate !== undefined ? "heartRate" : "", reading?.oxygen !== undefined ? "oxygen" : "", reading?.respiration !== undefined ? "respiration" : "", reading?.temperature !== undefined ? "temperature" : "", reading?.systolic !== undefined ? "systolic" : ""].filter(Boolean),
         heartRate: reading?.heartRate ?? 0, oxygen: reading?.oxygen ?? 0,
         respiration: reading?.respiration ?? 0, temperature: reading?.temperature ?? 0,
+        systolic: reading?.systolic,
         bloodPressure: reading?.systolic !== undefined && reading.diastolic !== undefined ? `${reading.systolic}/${reading.diastolic}` : patient.bloodPressure,
         time: reading?.capturedAt ? new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date(reading.capturedAt)) : "Sem leitura",
         history: history.slice(-720), ecgAbnormal: false }
       })
       if (current.length === next.length && current.every((record, index) => {
         const updated = next[index]
-        return record.id === updated.id && record.name === updated.name && record.bed === updated.bed && record.sector === updated.sector && record.condition === updated.condition && record.connected === updated.connected && JSON.stringify(record.available) === JSON.stringify(updated.available) && record.heartRate === updated.heartRate && record.oxygen === updated.oxygen && record.respiration === updated.respiration && record.temperature === updated.temperature && record.time === updated.time && record.history.length === updated.history.length && record.history.at(-1)?.time === updated.history.at(-1)?.time
+        return record.id === updated.id && record.name === updated.name && record.bed === updated.bed && record.sector === updated.sector && record.condition === updated.condition && record.connected === updated.connected && JSON.stringify(record.available) === JSON.stringify(updated.available) && record.heartRate === updated.heartRate && record.oxygen === updated.oxygen && record.respiration === updated.respiration && record.temperature === updated.temperature && record.systolic === updated.systolic && record.time === updated.time && record.history.length === updated.history.length && record.history.at(-1)?.time === updated.history.at(-1)?.time
       })) return current
       return next
     })
@@ -257,10 +310,14 @@ export default function VitalMonitoring({ patients, liveVitals, profile, acknowl
 
   const visibleRecords = useMemo(() => records.filter((record) => activePatientIds.has(record.id)), [activePatientIds, records])
   const selected = visibleRecords.find((record) => record.id === selectedId) ?? visibleRecords[0]
-  const attentionCount = visibleRecords.filter((record) => hasAttention(record, thresholds)).length
-  const stableCount = visibleRecords.filter((record) => record.connected && !hasAttention(record, thresholds)).length
-  const activeEvents = useMemo(() => visibleRecords.flatMap((record) =>
-    getTriggeredEvents(record, thresholds).map((event) => ({
+  const thresholdsFor = (patientId: string) => thresholdValues(thresholdsByPatient[patientId], defaultThresholds)
+  const selectedThresholds = selected ? thresholdsFor(selected.id) : defaultThresholds
+  const displayedThresholds = thresholdDraft && thresholdDraft.patientId === selected?.id ? thresholdDraft.values : selectedThresholds
+  const attentionCount = visibleRecords.filter((record) => hasAttention(record, thresholdsFor(record.id))).length
+  const stableCount = visibleRecords.filter((record) => record.connected && !hasAttention(record, thresholdsFor(record.id))).length
+  const activeEvents = useMemo(() => visibleRecords.flatMap((record) => {
+    const thresholds = thresholdValues(thresholdsByPatient[record.id], defaultThresholds)
+    return getTriggeredEvents(record, thresholds).map((event) => ({
       key: record.id + ":" + event.id,
       patientId: record.id,
       patientName: record.name,
@@ -270,14 +327,16 @@ export default function VitalMonitoring({ patients, liveVitals, profile, acknowl
       value: event.value,
       limit: event.limit,
       time: dateTimeClock(),
-      severity: eventSeverity(record, event.id),
-    })),
-  ), [visibleRecords, thresholds])
-  const selectedEvents = selected ? getTriggeredEvents(selected, thresholds) : []
+      severity: eventSeverity(record, event.id, thresholds),
+    }))
+  }), [visibleRecords, thresholdsByPatient, defaultThresholds])
+  const selectedEvents = selected ? getTriggeredEvents(selected, selectedThresholds) : []
+  const selectedStatus = selected ? getMonitorStatus(selected, selectedThresholds) : "stable"
   const offlineCount = visibleRecords.filter((record) => !record.connected).length
   const filteredRecords = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("pt-BR")
     return visibleRecords.filter((record) => {
+      const thresholds = thresholdValues(thresholdsByPatient[record.id], defaultThresholds)
       const text = (record.name + " " + record.bed + " " + record.sector).toLocaleLowerCase("pt-BR")
       const matchesFilter =
         filter === "all" ||
@@ -286,36 +345,50 @@ export default function VitalMonitoring({ patients, liveVitals, profile, acknowl
         (filter === "offline" && !record.connected)
       return text.includes(normalized) && matchesFilter
     })
-  }, [filter, query, visibleRecords, thresholds])
+  }, [filter, query, visibleRecords, thresholdsByPatient, defaultThresholds])
 
-  const updateThreshold = (key: keyof Thresholds, value: string) => {
+  const updateThreshold = (key: keyof VitalThresholdValues, value: string) => {
     const parsed = Number(value)
-    if (Number.isFinite(parsed)) setThresholds((current) => ({ ...current, [key]: parsed }))
+    if (!selected || !Number.isFinite(parsed)) return
+    setThresholdMessage("")
+    setThresholdDraft((current) => {
+      const base = current?.patientId === selected.id ? current.values : selectedThresholds
+      return { patientId: selected.id, values: { ...base, [key]: parsed } }
+    })
   }
 
-  const printReport = () => {
-    setShowAllHistory(true)
-    window.setTimeout(() => window.print(), 100)
+  const saveThresholds = async () => {
+    if (!selected || thresholdDraft?.patientId !== selected.id) return
+    setThresholdSaving(true)
+    setThresholdError("")
+    setThresholdMessage("")
+    try {
+      const saved = await api.updatePatientVitalThresholds(Number(selected.id), thresholdDraft.values, token)
+      setThresholdsByPatient((current) => ({ ...current, [selected.id]: saved }))
+      setThresholdDraft(null)
+      setThresholdMessage("Limites personalizados salvos para este paciente.")
+    } catch (cause) {
+      setThresholdError(cause instanceof ApiError ? cause.message : "Não foi possível salvar os limites deste paciente.")
+    } finally {
+      setThresholdSaving(false)
+    }
   }
-  const exportHistory = () => {
+
+  const restoreDefaultThresholds = async () => {
     if (!selected) return
-    const rows = [
-      ["Horário", "Frequência cardíaca (bpm)", "Saturação (%)", "Frequência respiratória (rpm)", "Temperatura (°C)"],
-      ...selected.history.map((sample) => [
-        sample.time,
-        String(sample.heartRate),
-        sample.oxygen.toFixed(1),
-        String(sample.respiration),
-        sample.temperature.toFixed(1),
-      ]),
-    ]
-    const csv = rows.map((row) => row.map((value) => '"' + value.replace(/"/g, '""') + '"').join(";")).join("\n")
-    const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }))
-    const link = document.createElement("a")
-    link.href = url
-    link.download = "historico-" + selected.id + ".csv"
-    link.click()
-    URL.revokeObjectURL(url)
+    setThresholdSaving(true)
+    setThresholdError("")
+    setThresholdMessage("")
+    try {
+      const config = await api.resetPatientVitalThresholds(Number(selected.id), token)
+      setThresholdsByPatient((current) => ({ ...current, [selected.id]: config }))
+      setThresholdDraft((current) => current?.patientId === selected.id ? null : current)
+      setThresholdMessage("Os limites padrão do hospital foram restaurados para este paciente.")
+    } catch (cause) {
+      setThresholdError(cause instanceof ApiError ? cause.message : "Não foi possível restaurar os limites padrão.")
+    } finally {
+      setThresholdSaving(false)
+    }
   }
 
   const controlStyle = { background: "var(--card)", borderColor: "var(--border)", color: "var(--foreground)" }
@@ -330,7 +403,7 @@ export default function VitalMonitoring({ patients, liveVitals, profile, acknowl
       const next = current.filter((key) => activeKeys.has(key))
       return next.length === current.length ? current : next
     })
-  }, [records, thresholds])
+  }, [records, thresholdsByPatient, defaultThresholds])
 
   useEffect(() => {
     setOccurrences((current) => {
@@ -355,11 +428,15 @@ export default function VitalMonitoring({ patients, liveVitals, profile, acknowl
     setOccurrences((current) => {
       let changed = false
       const next = current.map((occurrence) => {
-        if (!occurrence.resolvedAt && !activeByKey.has(occurrence.key)) {
+        if (occurrence.resolvedAt) return occurrence
+        const event = activeByKey.get(occurrence.key)
+        if (!event) {
           changed = true
           return { ...occurrence, resolvedAt: timestamp }
         }
-        return occurrence
+        if (occurrence.severity === event.severity && occurrence.value === event.value && occurrence.limit === event.limit) return occurrence
+        changed = true
+        return { ...occurrence, severity: event.severity, value: event.value, limit: event.limit }
       })
       for (const [key, event] of activeByKey) {
         if (next.some((occurrence) => occurrence.key === key && !occurrence.resolvedAt)) continue
@@ -391,11 +468,11 @@ export default function VitalMonitoring({ patients, liveVitals, profile, acknowl
         <PageTitle
           eyebrow={"Monitoramento · " + profile}
           title="Monitoramento de sinais vitais"
-          subtitle="Acompanhamento das últimas medições recebidas da API e do WebSocket."
+          subtitle="Acompanhamento das medições recentes de sinais vitais dos pacientes."
           action={
             <>
               <span className="inline-flex min-h-10 items-center gap-2 rounded-full border px-3 text-xs font-semibold" style={{ background: "var(--secondary)", borderColor: "var(--border)", color: "var(--foreground)" }}>
-                Feed do monitor
+                Sinais vitais
               </span>
             </>
           }
@@ -444,15 +521,17 @@ export default function VitalMonitoring({ patients, liveVitals, profile, acknowl
 
           <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
             {filteredRecords.map((record) => {
-              const attention = hasAttention(record, thresholds)
-              const critical = isCritical(record)
+              const thresholds = thresholdsFor(record.id)
+              const status = getMonitorStatus(record, thresholds)
+              const critical = status === "critical"
+              const attention = status === "alert"
               const active = selected?.id === record.id
               return (
                 <article
                   key={record.id}
                   className="monitor-screen min-w-0 rounded-[var(--radius)] p-3.5 transition-shadow"
                   style={{
-                    borderColor: active ? "var(--vital-spo2)" : critical ? "color-mix(in srgb, var(--vital-alarm) 60%, transparent)" : undefined,
+                    borderColor: active ? "var(--vital-spo2)" : critical ? "color-mix(in srgb, var(--vital-alarm) 60%, transparent)" : attention ? "color-mix(in srgb, var(--warning) 45%, transparent)" : undefined,
                     boxShadow: active ? "0 0 0 2px color-mix(in srgb, var(--vital-spo2) 35%, transparent), var(--shadow-md)" : "var(--shadow-sm)",
                   }}
                 >
@@ -465,11 +544,11 @@ export default function VitalMonitoring({ patients, liveVitals, profile, acknowl
                       <span
                         className="shrink-0 rounded-md px-2 py-1 text-[11px] font-bold uppercase tracking-wide"
                         style={{
-                          background: critical ? "var(--badge-danger)" : attention ? "rgba(245, 213, 71, 0.16)" : "rgba(53, 224, 143, 0.14)",
-                          color: critical ? "#FFFFFF" : attention ? "var(--vital-rr)" : "var(--vital-hr)",
+                          background: critical ? "var(--badge-danger)" : attention ? "var(--warning-surface)" : "rgba(53, 224, 143, 0.14)",
+                          color: critical ? "#FFFFFF" : attention ? "var(--warning-foreground)" : "var(--vital-hr)",
                         }}
                       >
-                        {critical ? "Crítico" : attention ? "Atenção" : "Estável"}
+                        {critical ? "CRÍTICO" : attention ? "ALERTA" : "ESTÁVEL"}
                       </span>
                     </div>
                   </button>
@@ -481,11 +560,11 @@ export default function VitalMonitoring({ patients, liveVitals, profile, acknowl
                     <span className="font-mono text-[11px] tabular-nums" style={{ color: "var(--monitor-muted)" }}>{record.deviceId} · {record.time}</span>
                   </div>
                   <div className="mt-3 grid grid-cols-2 gap-2">
-                    <Metric label="Frequência cardíaca" short="FC" value={String(record.heartRate)} unit="bpm" color="var(--vital-hr)" alarm={record.heartRate < thresholds.heartRateMin || record.heartRate > thresholds.heartRateMax} offline={!record.connected || !record.available.includes("heartRate")} />
-                    <Metric label="Saturação" short="SpO₂" value={record.oxygen.toFixed(1)} unit="%" color="var(--vital-spo2)" alarm={record.oxygen < thresholds.oxygenMin} offline={!record.connected || !record.available.includes("oxygen")} />
-                    <Metric label="Frequência respiratória" short="FR" value={String(record.respiration)} unit="rpm" color="var(--vital-rr)" alarm={record.respiration > thresholds.respirationMax} offline={!record.connected || !record.available.includes("respiration")} />
-                    <Metric label="Temperatura" short="TEMP" value={record.temperature.toFixed(1)} unit="°C" color="var(--vital-temp)" alarm={record.temperature >= thresholds.temperatureMax} offline={!record.connected || !record.available.includes("temperature")} />
-                    <div className="monitor-tile col-span-2 flex items-center justify-between gap-3 rounded-lg px-3 py-2">
+                    <Metric label="Frequência cardíaca" short="FC" value={String(record.heartRate)} unit="bpm" color="var(--vital-hr)" alarm={record.heartRate < thresholds.fcAlertaMin || record.heartRate > thresholds.fcAlertaMax} offline={!record.connected || !record.available.includes("heartRate")} />
+                    <Metric label="Saturação" short="SpO₂" value={record.oxygen.toFixed(1)} unit="%" color="var(--vital-spo2)" alarm={record.oxygen < thresholds.spo2AlertaMin} offline={!record.connected || !record.available.includes("oxygen")} />
+                    <Metric label="Frequência respiratória" short="FR" value={String(record.respiration)} unit="rpm" color="var(--vital-rr)" alarm={record.respiration > thresholds.frAlertaMax} offline={!record.connected || !record.available.includes("respiration")} />
+                    <Metric label="Temperatura" short="TEMP" value={record.temperature.toFixed(1)} unit="°C" color="var(--vital-temp)" alarm={record.temperature >= thresholds.temperaturaAlertaMax} offline={!record.connected || !record.available.includes("temperature")} />
+                    <div className="monitor-tile col-span-2 flex items-center justify-between gap-3 rounded-lg px-3 py-2" style={record.systolic !== undefined && record.systolic > thresholds.paSistolicaAlertaMax ? { borderColor: "color-mix(in srgb, var(--vital-alarm) 55%, transparent)" } : undefined}>
                       <p className="text-[11px] font-bold tracking-wide" style={{ color: "var(--vital-bp)" }}>PA <span className="font-medium" style={{ color: "var(--monitor-muted)" }}>· último registro</span></p>
                       <p className="monitor-value text-xl" style={{ color: "var(--vital-bp)" }} aria-label={"Pressão arterial do último registro: " + (record.bloodPressure ?? "sem registro") + " mmHg"}>
                         {record.bloodPressure ?? "--/--"}<span className="ml-1 text-[11px] font-medium" style={{ color: "var(--monitor-muted)" }}>mmHg</span>
@@ -513,12 +592,10 @@ export default function VitalMonitoring({ patients, liveVitals, profile, acknowl
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-lg border px-2.5 py-1.5 text-xs font-semibold" style={{ borderColor: "var(--border)", color: "var(--foreground)" }}>Leito {selected.bed}</span>
-                <button type="button" onClick={printReport} className="min-h-9 rounded-lg px-3 text-xs font-semibold" style={{ background: "var(--secondary)", color: "var(--primary)" }}>Salvar em PDF</button>
-                <button type="button" onClick={exportHistory} className="min-h-9 rounded-lg px-3 text-xs font-semibold" style={{ background: "var(--secondary)", color: "var(--primary)" }}>Exportar CSV</button>
               </div>
             </div>
             <div className="monitor-screen mt-4 rounded-xl p-3.5">
-              <p className="text-xs" style={{ color: "var(--monitor-muted)" }}>O endpoint atual fornece parâmetros numéricos. O traçado de ECG não está disponível na API.</p>
+              <p className="text-xs" style={{ color: "var(--monitor-muted)" }}>Acompanhamento dos indicadores de saúde registrados para o paciente.</p>
               <div className="mt-3 grid grid-cols-2 gap-x-2 gap-y-3 min-[420px]:grid-cols-3">
                 {[
                   { short: "FC", value: String(selected.heartRate), unit: "bpm", color: "var(--vital-hr)", live: true },
@@ -544,7 +621,7 @@ export default function VitalMonitoring({ patients, liveVitals, profile, acknowl
                 <polyline className="monitor-trace" points={points(selected.history.map((sample) => sample.heartRate), 45, 125)} fill="none" stroke="var(--vital-hr)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                 <polyline className="monitor-trace" points={points(selected.history.map((sample) => sample.oxygen), 80, 100)} fill="none" stroke="var(--vital-spo2)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              <p className="mt-1 text-[11px]" style={{ color: "var(--monitor-muted)" }}>Leituras recebidas do WebSocket · retenção em memória de até 1 hora</p>
+              <p className="mt-1 text-[11px]" style={{ color: "var(--monitor-muted)" }}>Tendência recente da frequência cardíaca e da saturação de oxigênio.</p>
             </div>
             <div className="mt-3 rounded-xl border p-3" role={selectedEvents.length ? "alert" : undefined} style={{ background: selectedEvents.length ? "var(--alert-surface)" : "var(--background)", borderColor: selectedEvents.length ? "var(--alert-border)" : "var(--border)" }}>
               <h3 className="text-xs font-bold" style={{ color: "var(--foreground)" }}>Verificação de limites</h3>
@@ -572,7 +649,7 @@ export default function VitalMonitoring({ patients, liveVitals, profile, acknowl
                       </li>
                     )
                   })}
-                  <li className="pt-1 font-semibold">Nível visual: {isCritical(selected) ? "Crítico" : "Moderado"}</li>
+                  <li className="pt-1 font-semibold">Nível visual: {selectedStatus === "critical" ? "Crítico" : selectedStatus === "alert" ? "Alerta" : "Estável"}</li>
                 </ul>
               ) : (
                 <p className="mt-1 text-xs" style={{ color: "var(--muted-foreground)" }}>Nenhum limite configurado foi ultrapassado nos dados recebidos.</p>
@@ -587,9 +664,10 @@ export default function VitalMonitoring({ patients, liveVitals, profile, acknowl
                   <article key={occurrence.id} className="rounded-lg border p-3 text-[11px] leading-relaxed" style={{ background: "var(--card)", borderColor: "var(--border)", color: "var(--muted-foreground)" }}>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <strong style={{ color: "var(--foreground)" }}>{occurrence.patientName} · {occurrence.label}</strong>
-                      <span className="font-semibold" style={{ color: occurrence.severity === "Crítico" ? "var(--danger-foreground)" : occurrence.severity === "Moderado" ? "var(--warning-foreground)" : "var(--primary)" }}>{occurrence.severity} · {occurrence.resolvedAt ? "Resolvido" : "Ativo"}</span>
+                      <span className="font-semibold" style={{ color: occurrence.resolvedAt ? "var(--muted-foreground)" : occurrence.severity === "Crítico" ? "var(--danger-foreground)" : occurrence.severity === "Moderado" ? "var(--warning-foreground)" : "var(--primary)" }}>{occurrence.resolvedAt ? "Resolvido" : occurrence.severity}</span>
                     </div>
                     <p className="mt-1">{occurrence.value} · Limite: {occurrence.limit}</p>
+                    {occurrence.resolvedAt && <p>Nível registrado: {occurrence.severity}</p>}
                     {(occurrence.patientId || occurrence.bed || occurrence.sector) && <p>{occurrence.patientId ? occurrence.patientId + " · " : ""}{occurrence.bed ? "Leito " + occurrence.bed + " · " : ""}{occurrence.sector ?? ""}</p>}
                     <p>Início: {occurrence.startedAt}{occurrence.resolvedAt ? " · Resolução: " + occurrence.resolvedAt : ""}</p>
                     <p>Atendimento: {occurrence.acknowledged ? "Reconhecido" : "Pendente"}</p>
@@ -614,32 +692,38 @@ export default function VitalMonitoring({ patients, liveVitals, profile, acknowl
               </div>
             </div>
             <details className="mt-4 rounded-xl border p-3" style={{ background: "var(--background)", borderColor: "var(--border)" }}>
-              <summary className="monitor-summary -m-3 flex min-h-11 cursor-pointer items-center rounded-xl p-3 text-xs font-bold" style={{ color: "var(--foreground)" }}>Configurar limites de alerta</summary>
+              <summary className="monitor-summary -m-3 flex min-h-11 cursor-pointer items-center rounded-xl p-3 text-xs font-bold" style={{ color: "var(--foreground)" }}>Configurar limites do paciente</summary>
               <div className="mt-3 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
-                {[
-                  { key: "heartRateMin", label: "FC mínima (bpm)" },
-                  { key: "heartRateMax", label: "FC máxima (bpm)" },
-                  { key: "oxygenMin", label: "SpO₂ mínima (%)" },
-                  { key: "respirationMax", label: "FR máxima (rpm)" },
-                  { key: "temperatureMax", label: "Temperatura máxima (°C)" },
-                ].map((field) => (
+                <p className="text-xs min-[420px]:col-span-2" style={{ color: "var(--muted-foreground)" }}>
+                  {thresholdLoading ? "Carregando limites…" : thresholdsByPatient[selected.id]?.personalizado ? "Este paciente possui limites personalizados." : "Este paciente está usando os limites padrão do hospital."}
+                </p>
+                {thresholdFields.map((field) => (
                   <label key={field.key} className="flex min-w-0 flex-col gap-1 text-xs font-medium" style={{ color: "var(--muted-foreground)" }}>
                     {field.label}
-                    <input type="number" step={field.key === "temperatureMax" || field.key === "oxygenMin" ? "0.1" : "1"} value={thresholds[field.key as keyof Thresholds]} onChange={(event) => updateThreshold(field.key as keyof Thresholds, event.target.value)} className="min-h-10 min-w-0 rounded-lg border px-2 text-sm" style={controlStyle} />
+                    <input type="number" disabled={thresholdLoading || !thresholdsByPatient[selected.id]} step={field.step} value={displayedThresholds[field.key]} onChange={(event) => updateThreshold(field.key, event.target.value)} className="min-h-10 min-w-0 rounded-lg border px-2 text-sm disabled:cursor-not-allowed disabled:opacity-50" style={controlStyle} />
                   </label>
                 ))}
-                <button type="button" onClick={() => setThresholds(defaultThresholds)} className="min-h-10 self-end rounded-lg px-3 text-xs font-semibold min-[420px]:col-span-2" style={{ background: "var(--secondary)", color: "var(--primary)" }}>
-                  Restaurar limites de exemplo
-                </button>
+                <div className="grid gap-2 min-[420px]:col-span-2 sm:grid-cols-2">
+                  <button type="button" disabled={!thresholdDraft || thresholdDraft.patientId !== selected.id || !thresholdsByPatient[selected.id] || thresholdSaving || thresholdLoading} onClick={saveThresholds} className="min-h-10 rounded-lg px-3 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50" style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}>
+                    {thresholdSaving ? "Salvando…" : "Salvar limites"}
+                  </button>
+                  <button type="button" disabled={!thresholdsByPatient[selected.id] || thresholdSaving || thresholdLoading} onClick={restoreDefaultThresholds} className="min-h-10 rounded-lg px-3 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50" style={{ background: "var(--secondary)", color: "var(--primary)" }}>
+                    Restaurar padrão do hospital
+                  </button>
+                </div>
+                {thresholdError && <p role="alert" className="text-xs min-[420px]:col-span-2" style={{ color: "var(--danger-foreground)" }}>{thresholdError}</p>}
+                {thresholdMessage && <p role="status" className="text-xs min-[420px]:col-span-2" style={{ color: "var(--success-foreground)" }}>{thresholdMessage}</p>}
+                <p className="text-xs min-[420px]:col-span-2" style={{ color: "var(--muted-foreground)" }}>
+                  Os limites são configurações de demonstração e devem seguir protocolo clínico aprovado antes de uso real.
+                </p>
               </div>
-              <p className="mt-2 text-xs" style={{ color: "var(--muted-foreground)" }}>Os limites são exemplos de interface e precisam ser definidos por protocolos clínicos antes de qualquer uso real.</p>
             </details>
           </aside>
         )}
       </div>
 
       <p className="rounded-lg border px-3 py-2.5 text-xs leading-relaxed" style={{ background: "var(--warning-surface)", borderColor: "color-mix(in srgb, var(--warning) 35%, transparent)", color: "var(--warning-foreground)" }}>
-        Os valores exibidos vêm da última leitura recebida pela API/WebSocket. Uma conexão fica offline após 15 segundos sem atualização.
+        Utilize estas informações como apoio ao acompanhamento clínico, considerando sempre o quadro completo do paciente.
       </p>
     </section>
   )

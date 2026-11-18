@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useId, useMemo, useRef, useState } from "react"
 import type { Screen } from "../App"
 import DashboardSidebar from "./DashboardSidebar"
 import { Avatar, ShowMoreButton, summaryLimit, DashboardHeader, EmptyState, FormSection, HeroHeader, HeroStat, InlineNotice, KeyValue, MetaItem, PageTitle, ProgressBar, QuickAction, SectionCard, SectionContext, SelectField, StatusBadge, TextField, TimelineItem, UiIcon, shiftLabel, toneStyles, type Tone } from "./ui"
@@ -94,6 +94,149 @@ function formatarTelefone(valor: string): string {
       .replace(/(\d{2})(\d)/, "($1) $2")
       .replace(/(\d{4})(\d)/, "$1-$2")
   return nums.replace(/(\d{2})(\d)/, "($1) $2").replace(/(\d{5})(\d)/, "$1-$2")
+}
+
+interface AppointmentPickerOption {
+  value: string
+  label: string
+  detail: string
+  searchText: string
+}
+
+function AppointmentPicker({
+  label,
+  value,
+  options,
+  onChange,
+  placeholder,
+  hint,
+  emptyMessage,
+  required = true,
+  disabled = false,
+}: {
+  label: string
+  value: string
+  options: AppointmentPickerOption[]
+  onChange: (value: string) => void
+  placeholder: string
+  hint: string
+  emptyMessage: string
+  required?: boolean
+  disabled?: boolean
+}) {
+  const inputId = useId()
+  const listId = inputId + "-options"
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [query, setQuery] = useState("")
+  const [open, setOpen] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(0)
+  const selected = options.find((option) => option.value === value)
+  const normalizedQuery = query.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR")
+  const matches = options
+    .filter((option) => !normalizedQuery || option.searchText.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR").includes(normalizedQuery))
+    .slice(0, 50)
+
+  useEffect(() => {
+    if (value) inputRef.current?.setCustomValidity("")
+  }, [value])
+
+  const choose = (option: AppointmentPickerOption) => {
+    onChange(option.value)
+    inputRef.current?.setCustomValidity("")
+    setQuery("")
+    setOpen(false)
+    setActiveIndex(0)
+  }
+
+  return (
+    <div
+      className="relative flex min-w-0 flex-col gap-1.5"
+      onBlur={(event) => {
+        const nextTarget = event.relatedTarget
+        if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) setOpen(false)
+      }}
+    >
+      <label htmlFor={inputId} className="text-sm font-medium" style={{ color: "var(--foreground)" }}>
+        {label}{required && <> <span aria-hidden="true" style={{ color: "var(--danger-foreground)" }}>*</span></>}
+      </label>
+      <input
+        ref={inputRef}
+        id={inputId}
+        type="text"
+        role="combobox"
+        aria-autocomplete="list"
+        aria-expanded={open}
+        aria-controls={open ? listId : undefined}
+        aria-activedescendant={open && matches[activeIndex] ? `${inputId}-option-${activeIndex}` : undefined}
+        aria-describedby={inputId + "-hint"}
+        aria-required={required || undefined}
+        autoComplete="off"
+        disabled={disabled}
+        placeholder={placeholder}
+        required={required}
+        value={query || selected?.label || ""}
+        onFocus={(event) => {
+          setOpen(true)
+          setActiveIndex(0)
+          if (value) event.currentTarget.select()
+        }}
+        onChange={(event) => {
+          setQuery(event.target.value)
+          setOpen(true)
+          setActiveIndex(0)
+          event.currentTarget.setCustomValidity("")
+          if (value) onChange("")
+        }}
+        onInvalid={(event) => {
+          if (required && !value) event.currentTarget.setCustomValidity("Selecione uma opção da lista.")
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown" && matches.length) {
+            event.preventDefault()
+            setOpen(true)
+            setActiveIndex((index) => Math.min(index + 1, matches.length - 1))
+          } else if (event.key === "ArrowUp" && matches.length) {
+            event.preventDefault()
+            setOpen(true)
+            setActiveIndex((index) => Math.max(index - 1, 0))
+          } else if (event.key === "Enter" && open && matches[activeIndex]) {
+            event.preventDefault()
+            choose(matches[activeIndex])
+          } else if (event.key === "Escape") {
+            setOpen(false)
+          }
+        }}
+        className="h-11 rounded-lg border px-3 text-sm outline-none focus:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
+        style={{ background: disabled ? "var(--secondary)" : "var(--card)", borderColor: "var(--border)", color: "var(--foreground)" }}
+      />
+      <p id={inputId + "-hint"} className="text-xs" style={{ color: "var(--muted-foreground)" }}>{hint}</p>
+      {open && !disabled && (
+        <div id={listId} role="listbox" aria-label={label} className="absolute inset-x-0 top-full z-30 mt-1 max-h-64 overflow-y-auto rounded-lg border p-1 shadow-lg" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
+          {matches.length ? matches.map((option, index) => (
+            <div
+              id={`${inputId}-option-${index}`}
+              key={option.value}
+              role="option"
+              aria-selected={option.value === value}
+              onMouseDown={(event) => event.preventDefault()}
+              onMouseEnter={() => setActiveIndex(index)}
+              onClick={() => choose(option)}
+              className="cursor-pointer rounded-md px-3 py-2 text-sm"
+              style={{ background: index === activeIndex ? "var(--secondary)" : "transparent", color: "var(--foreground)" }}
+            >
+              <span className="block font-medium">{option.label}</span>
+              <span className="block text-xs" style={{ color: "var(--muted-foreground)" }}>{option.detail}</span>
+            </div>
+          )) : (
+            <p className="px-3 py-2 text-sm" style={{ color: "var(--muted-foreground)" }}>
+              {options.length ? `Nenhum resultado para “${query}”.` : emptyMessage}
+            </p>
+          )}
+          {matches.length === 50 && <p className="px-3 py-2 text-xs" style={{ color: "var(--muted-foreground)" }}>Mostrando 50 resultados; refine a busca.</p>}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function ReceptionistDashboard({
@@ -269,18 +412,18 @@ export default function ReceptionistDashboard({
     }
   }), [examesSolicitados, pacientesCadastrados])
 
-  const pacientesInternados = leitos
+  const pacientesInternados = useMemo(() => leitos
     .filter((l) => l.status === "Ocupado" && l.pacienteId)
     .flatMap((l) => {
       const paciente = pacientesCadastrados.find((p) => p.id === l.pacienteId)
       if (!paciente) return []
       const internacao = internacoesLocais.find((item) => item.pacienteId === l.pacienteId && item.status === "Ativa")
       return [{
-      leito: l,
-      paciente,
-      internacao,
+        leito: l,
+        paciente,
+        internacao,
       }]
-    })
+    }), [leitos, pacientesCadastrados, internacoesLocais])
   const pacientesDisponiveisParaInternacao = pacientesCadastrados.filter((patient) => !leitos.some((bed) => bed.status === "Ocupado" && bed.pacienteId === patient.id))
   const historicoPaciente = (patientId: string) => [
     ...agendamentos.filter((item) => item.pacienteId === patientId).map((item) => ({ data: new Date(`${item.data}T12:00:00`).toLocaleDateString("pt-BR"), tipo: "Consulta", medico: medicoPorId(item.medicoId)?.nome ?? "Médico", local: "Agenda médica" })),
@@ -447,16 +590,23 @@ export default function ReceptionistDashboard({
   }
 
   const handleAgendamento = async () => {
+    if (!formAgendamento.medicoId || !formAgendamento.pacienteId) {
+      setApiError(medicosDisponiveis.length ? "Selecione um médico e um paciente nos resultados da busca." : "Cadastre um médico antes de criar agendamentos.")
+      return
+    }
     if (
       !formAgendamento.hora ||
-      !formAgendamento.pacienteId ||
       horariosOcupados.includes(formAgendamento.hora)
     )
       return
     const paciente = pacientesCadastrados.find(
       (p) => p.id === formAgendamento.pacienteId,
     )
-    if (!formAgendamento.medicoId || !paciente) { setApiError("Cadastre um médico antes de criar agendamentos."); return }
+    if (!paciente || !medicosDisponiveis.some((doctor) => String(doctor.id) === formAgendamento.medicoId)) {
+      setApiError("Selecione um médico e um paciente cadastrados nos resultados da busca.")
+      return
+    }
+    setApiError("")
     try {
     const created = await api.createAppointment({ pacienteId: Number(formAgendamento.pacienteId), medicoId: Number(formAgendamento.medicoId), data: formAgendamento.data, horario: formAgendamento.hora, duracao: 30, status: "AGENDADA", tipo: "Consulta", observacoes: null }, token)
     const novo = mapAppointment(created, pacientesCadastrados)
@@ -496,6 +646,24 @@ export default function ReceptionistDashboard({
   const limiteMedicosCelular = summaryLimit(medicosDisponiveis.length, 2)
   const limiteExamesCelular = summaryLimit(examesDaRecepcao.length, 3)
   const medicoPorId = (id: string) => medicosDisponiveis.find((doctor) => String(doctor.id) === id)
+  const appointmentDoctorOptions = useMemo(() => medicosDisponiveis.map((doctor) => ({
+    value: String(doctor.id),
+    label: doctor.nome,
+    detail: `${formatSpecialty(doctor.especialidade)} · CRM ${doctor.crm}`,
+    searchText: `${doctor.nome} ${doctor.crm} ${doctor.especialidade} ${doctor.id}`,
+  })), [medicosDisponiveis])
+  const appointmentPatientOptions = useMemo(() => pacientesCadastrados.map((patient) => ({
+    value: patient.id,
+    label: patient.nome,
+    detail: `CPF ${patient.cpf} · prontuário ${patient.id}`,
+    searchText: `${patient.nome} ${patient.cpf} ${patient.id}`,
+  })), [pacientesCadastrados])
+  const fichaPatientOptions = useMemo(() => pacientesInternados.map(({ paciente, leito }) => ({
+    value: paciente.id,
+    label: paciente.nome,
+    detail: `Leito ${formatBedNumber(leito)} · CPF ${paciente.cpf}`,
+    searchText: `${paciente.nome} ${paciente.cpf} ${paciente.id} ${formatBedNumber(leito)} ${leito.setor}`,
+  })), [pacientesInternados])
   const iniciais = (nome: string) => nome.split(" ").filter(Boolean).map((part) => part[0]).slice(0, 2).join("").toUpperCase()
   const ocupacaoPercentual = leitos.length ? Math.round((leitosOcupados.length / leitos.length) * 100) : 0
   const contarLeitos = (status: Leito["status"]) => leitos.filter((bed) => bed.status === status).length
@@ -1446,13 +1614,32 @@ export default function ReceptionistDashboard({
                   >
                     <FormSection step={1} title="Profissional e paciente">
                       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                        <SelectField label="Médico" value={formAgendamento.medicoId} onChange={(v) => setFormAgendamento({ ...formAgendamento, medicoId: v, hora: "" })} required hint={`Especialidade: ${formatSpecialty(medicoPorId(formAgendamento.medicoId)?.especialidade ?? "—")}`}>
-                          {medicosDisponiveis.map((m) => <option key={m.id} value={m.id}>{m.nome} — {formatSpecialty(m.especialidade)}</option>)}
-                        </SelectField>
-                        <SelectField label="Paciente" value={formAgendamento.pacienteId} onChange={(v) => setFormAgendamento({ ...formAgendamento, pacienteId: v })} required>
-                          <option value="">Selecione o paciente...</option>
-                          {pacientesCadastrados.map((p) => <option key={p.id} value={p.id}>{p.nome} — {p.cpf}</option>)}
-                        </SelectField>
+                        <AppointmentPicker
+                          label="Médico"
+                          value={formAgendamento.medicoId}
+                          options={appointmentDoctorOptions}
+                          onChange={(value) => {
+                            setApiError("")
+                            setFormAgendamento({ ...formAgendamento, medicoId: value, hora: "" })
+                          }}
+                          placeholder="Buscar por nome, especialidade ou CRM"
+                          hint={formAgendamento.medicoId ? `Especialidade: ${formatSpecialty(medicoPorId(formAgendamento.medicoId)?.especialidade ?? "—")}` : "Digite para filtrar e selecione um médico."}
+                          emptyMessage="Nenhum médico cadastrado."
+                          disabled={apiLoading}
+                        />
+                        <AppointmentPicker
+                          label="Paciente"
+                          value={formAgendamento.pacienteId}
+                          options={appointmentPatientOptions}
+                          onChange={(value) => {
+                            setApiError("")
+                            setFormAgendamento({ ...formAgendamento, pacienteId: value })
+                          }}
+                          placeholder="Buscar por nome, CPF ou prontuário"
+                          hint="Digite para filtrar e selecione um paciente."
+                          emptyMessage="Nenhum paciente cadastrado."
+                          disabled={apiLoading}
+                        />
                       </div>
                     </FormSection>
                     <FormSection step={2} title="Data e horário">
@@ -1508,7 +1695,7 @@ export default function ReceptionistDashboard({
                       <div>{agendamentoSucesso ? <InlineNotice tone="success">Consulta agendada</InlineNotice> : <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>A consulta aparece na agenda do médico imediatamente</span>}</div>
                       <button
                         type="submit"
-                        disabled={!formAgendamento.hora || !formAgendamento.pacienteId || horariosOcupados.includes(formAgendamento.hora)}
+                        disabled={!formAgendamento.medicoId || !formAgendamento.hora || !formAgendamento.pacienteId || horariosOcupados.includes(formAgendamento.hora)}
                         className="min-h-11 rounded-lg px-5 text-sm font-semibold"
                         style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
                       >
@@ -1551,12 +1738,17 @@ export default function ReceptionistDashboard({
               />
 
               <div className="no-print mb-5 rounded-2xl border p-4 sm:p-5" style={{ background: "var(--card)", borderColor: "var(--border)", boxShadow: "var(--shadow-sm)" }}>
-                <SelectField label="Paciente internado" value={fichaPacienteId} onChange={(v) => { setFichaPacienteId(v); setFichaEnviadaId(null) }}>
-                  <option value="">Selecione o paciente...</option>
-                  {pacientesInternados.map((pi) => (
-                    <option key={pi.paciente.id} value={pi.paciente.id}>{pi.paciente.nome} - {formatBedNumber(pi.leito)}</option>
-                  ))}
-                </SelectField>
+                <AppointmentPicker
+                  label="Paciente internado"
+                  value={fichaPacienteId}
+                  options={fichaPatientOptions}
+                  onChange={(value) => { setFichaPacienteId(value); setFichaEnviadaId(null) }}
+                  placeholder="Buscar por nome, CPF, prontuário ou leito"
+                  hint={pacientesInternados.length ? `${pacientesInternados.length} paciente${pacientesInternados.length === 1 ? "" : "s"} internado${pacientesInternados.length === 1 ? "" : "s"} disponível${pacientesInternados.length === 1 ? "" : "is"}.` : "Não há pacientes internados para selecionar."}
+                  emptyMessage="Nenhum paciente internado."
+                  required={false}
+                  disabled={apiLoading}
+                />
               </div>
 
               {fichaPacienteId && (() => {

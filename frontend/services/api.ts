@@ -68,6 +68,26 @@ export interface PrescriptionItemDto { id: number; prescricaoId: number; medicam
 export interface MedicationDto { id: number; nome: string; dosagem: string; ativo: boolean }
 export interface MedicationAdministrationDto { id: number; dataHora: string; dose: string; via: string; observacao: string | null; itemPrescricaoId: number; pacienteId: number; administradoPor: number }
 export interface VitalDto { pacienteId: number; leitoId: number; tipo: "TEMPERATURA" | "PRESSAO_SISTOLICA" | "PRESSAO_DIASTOLICA" | "FREQUENCIA_CARDIACA" | "FREQUENCIA_RESPIRATORIA" | "SATURACAO_OXIGENIO"; valor: number; unidade: string; capturadoEm: string }
+export interface VitalThresholdValues {
+  fcAlertaMin: number
+  fcAlertaMax: number
+  fcCriticoMin: number
+  fcCriticoMax: number
+  spo2AlertaMin: number
+  spo2CriticoMin: number
+  frAlertaMax: number
+  frCriticoMax: number
+  temperaturaAlertaMax: number
+  temperaturaCriticoMax: number
+  paSistolicaAlertaMax: number
+  paSistolicaCriticoMax: number
+}
+export interface VitalThresholdsDto extends VitalThresholdValues {
+  pacienteId: number | null
+  personalizado: boolean
+  atualizadoPorId: number | null
+  atualizadoEm: string | null
+}
 export interface AttendanceDto { id: number; data: string; tipo: string; descricao: string; status: string; leitoId: number | null; pacienteId: number; funcionarioResponsavelId: number; medicoResponsavelId: number }
 export interface ClinicalRecordDto { id: number; data: string; descricao: string; anamnese: string | null; exameFisico: string | null; diagnostico: string | null; conduta: string | null; observacao: string | null; medicoId: number; atendimentoId: number }
 export interface AlertDto { id: number; tipo: string; mensagem: string; dataHora: string; nivel: string; ativo: boolean; pacienteId: number }
@@ -156,6 +176,11 @@ export const api = {
   listMedicationAdministrations: (token: string) => request<MedicationAdministrationDto[]>("/api/administracoes-medicamento", {}, token),
   createMedicationAdministration: (payload: Omit<MedicationAdministrationDto, "id">, token: string) => request<MedicationAdministrationDto>("/api/administracoes-medicamento", { method: "POST", body: JSON.stringify(payload) }, token),
   getCurrentVitals: (patientId: string, token: string) => request<VitalDto[]>(`/api/pacientes/${patientId}/sinais-vitais/atuais`, {}, token),
+  getDefaultVitalThresholds: (token: string) => request<VitalThresholdsDto>("/api/configuracoes/limites-sinais-vitais", {}, token),
+  updateDefaultVitalThresholds: (payload: VitalThresholdValues, token: string) => request<VitalThresholdsDto>("/api/configuracoes/limites-sinais-vitais", { method: "PUT", body: JSON.stringify(payload) }, token),
+  getPatientVitalThresholds: (patientId: number, token: string) => request<VitalThresholdsDto>(`/api/pacientes/${patientId}/limites-sinais-vitais`, {}, token),
+  updatePatientVitalThresholds: (patientId: number, payload: VitalThresholdValues, token: string) => request<VitalThresholdsDto>(`/api/pacientes/${patientId}/limites-sinais-vitais`, { method: "PUT", body: JSON.stringify(payload) }, token),
+  resetPatientVitalThresholds: (patientId: number, token: string) => request<VitalThresholdsDto>(`/api/pacientes/${patientId}/limites-sinais-vitais`, { method: "DELETE" }, token),
   listActivities: (token: string) => request<ActivityDto[]>("/api/atividades", {}, token),
   createActivity: (payload: Pick<ActivityDto, "acao" | "entidade" | "detalhes">, token: string) => request<ActivityDto>("/api/atividades", { method: "POST", body: JSON.stringify(payload) }, token),
 }

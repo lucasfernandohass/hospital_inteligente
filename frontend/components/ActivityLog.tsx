@@ -52,26 +52,6 @@ export default function ActivityLog({ token, role }: Props) {
     return () => { current = false }
   }, [token])
 
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value))
-}
-
-export default function ActivityLog({ token, role }: Props) {
-  const [records, setRecords] = useState<ActivityDto[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState("")
-
-  useEffect(() => {
-    let current = true
-    setLoading(true)
-    api.listActivities(token)
-      .then((items) => { if (current) { setRecords(items); setError("") } })
-      .catch((cause) => { if (current) setError(cause instanceof ApiError ? cause.message : "Não foi possível carregar as atividades.") })
-      .finally(() => { if (current) setLoading(false) })
-    return () => { current = false }
-  }, [token])
-
   const isAdmin = role === "ADMINISTRADOR"
 
   return (

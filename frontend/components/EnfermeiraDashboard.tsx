@@ -137,12 +137,9 @@ export default function NurseDashboard({
   const getPatientRisk = (patient: typeof pacientes[number]) => {
     const alerts = monitoringAlerts.filter((alert) => alert.patientId === patient.id)
     if (alerts.some((alert) => alert.severity === "Crítico")) return "high"
-    if (alerts.some((alert) => alert.severity === "Moderado")) return patient.risco === "high" ? "high" : "medium"
-    if (alerts.some((alert) => alert.severity === "Informativo")) return patient.risco === "low" ? "medium" : patient.risco
+    if (alerts.some((alert) => alert.severity === "Moderado")) return "medium"
     const reading = liveVitals[patient.id]
     if (!reading || [reading.heartRate, reading.temperature, reading.oxygen, reading.systolic].every((value) => value === undefined)) return "unknown"
-    if ((reading.oxygen !== undefined && reading.oxygen < 90) || (reading.heartRate !== undefined && (reading.heartRate > 120 || reading.heartRate < 45)) || (reading.temperature !== undefined && reading.temperature >= 39) || (reading.systolic !== undefined && reading.systolic >= 180)) return "high"
-    if ((reading.oxygen !== undefined && reading.oxygen < 94) || (reading.heartRate !== undefined && (reading.heartRate > 100 || reading.heartRate < 55)) || (reading.temperature !== undefined && reading.temperature >= 38) || (reading.systolic !== undefined && reading.systolic >= 140)) return "medium"
     return "low"
   }
   const [patientSearch, setPatientSearch] = useState("")
@@ -424,6 +421,7 @@ export default function NurseDashboard({
           {dataError && <p role="alert" className="mb-4 rounded-xl border px-4 py-3 text-sm" style={{ background: "var(--danger-surface)", borderColor: "var(--border)", color: "var(--danger-foreground)" }}>{dataError}</p>}
           <div className={activeTab === "monitoramento" ? "block" : "hidden"} aria-hidden={activeTab !== "monitoramento"}>
             <VitalMonitoring
+              token={token}
               profile="Enfermagem"
               onAlertsChange={setMonitoringAlerts}
               acknowledgedAlerts={monitoringAcknowledged}
