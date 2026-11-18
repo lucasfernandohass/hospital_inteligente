@@ -9,7 +9,11 @@ export interface SharedExamRequest {
   status: "agendado" | "em andamento" | "resultado"
   resultado: string | null
   solicitante: string
+  medicoId?: string
+  atendimentoId?: string
+  amostra?: string
+  metodo?: string
+  modalidade?: string
+  regiaoCorpo?: string
   hora?: string
 }
-
-export const EXAM_STORAGE_KEY = "inteliHosp-exames-demonstrativos"

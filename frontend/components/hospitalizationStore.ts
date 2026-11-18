@@ -13,4 +13,3 @@ export interface Hospitalization {
   dataAlta?: string
 }
 
-export const HOSPITALIZATION_STORAGE_KEY = "inteliHosp-internacoes"

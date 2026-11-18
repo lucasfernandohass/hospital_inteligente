@@ -1,0 +1,10 @@
+{
+    "running": true,
+    "scenario": "febre",
+    "startedAt": "2026-10-19T21:47:00-03:00",
+    "lastCycleAt": "2026-10-19T21:47:26-03:00",
+    "lastError": null,
+    "step": 6,
+    "lastSentCount": 1,
+    "activePatients": 1
+}

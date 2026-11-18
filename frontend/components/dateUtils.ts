@@ -1,4 +1,4 @@
-// Leitura tolerante das datas exibidas nos dados demonstrativos
+// Leitura tolerante das datas exibidas nos dados recebidos da API
 // ("12 Set 2026", "26 de out. de 2026", "26/10/2026" ou "2026-10-26").
 const months = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"]
 

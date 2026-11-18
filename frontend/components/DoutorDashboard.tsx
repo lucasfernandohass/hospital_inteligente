@@ -18,7 +18,7 @@ import type { Hospitalization } from "./hospitalizationStore"
 import type { RegisteredBed, RegisteredPatient } from "./patientStore"
 import { usePanelRoute } from "../hooks/usePanelRoute"
 import { api, ApiError, type DoctorDto } from "../services/api"
-import { formatBedNumber, formatSpecialty, mapBed, mapClinicalEvolutions, mapInternment, mapPatient } from "../services/mappers"
+import { mapBed, mapClinicalEvolutions, mapInternment, mapPatient } from "../services/mappers"
 import { mapPrescriptions } from "../services/mappers"
 import { useVitalFeed } from "../hooks/useVitalFeed"
 
@@ -106,8 +106,8 @@ export default function DoctorDashboard({
     const lastAppointment = receptionAppointments.filter((item) => item.pacienteId === patient.id).sort((a, b) => `${b.data}T${b.hora}`.localeCompare(`${a.data}T${a.hora}`))[0]
     return {
       id: patient.id, nome: patient.nome, cpf: patient.cpf, dataNasc: patient.dataNasc, idade, sexo: patient.sexo,
-      telefone: patient.telefone, convenio: patient.convenio, leito: occupiedBed ? formatBedNumber(occupiedBed) : "—",
-      setor: occupiedBed?.setor ?? occupiedBed?.tipo ?? (doctorProfile ? formatSpecialty(doctorProfile.especialidade) : "—"),
+      telefone: patient.telefone, convenio: patient.convenio, leito: occupiedBed?.numero ?? "—",
+      setor: occupiedBed?.setor ?? occupiedBed?.tipo ?? doctorProfile?.especialidade ?? "—",
       condicao: admission?.motivo ?? (lastAppointment ? "Consulta agendada" : "Sem atendimento associado"),
       status: "sem avaliação", avatar: patient.nome.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase(),
       ultimo: lastAppointment ? `${new Date(`${lastAppointment.data}T${lastAppointment.hora}:00`).toLocaleDateString("pt-BR")} · ${lastAppointment.hora}` : "—",
@@ -117,7 +117,7 @@ export default function DoctorDashboard({
   const doctorActiveHospitalizations = useMemo(() => hospitalizations.filter((admission) => admission.status === "Ativa" && admission.medicoId === String(userId)), [hospitalizations, userId])
   const monitorPatients = useMemo(() => pacientes.filter((patient) => doctorActiveHospitalizations.some((admission) => admission.pacienteId === patient.id)).map((patient) => {
     const bed = registeredBeds.find((item) => item.status === "Ocupado" && item.pacienteId === patient.id)
-    return { id: patient.id, name: patient.nome, bed: bed ? formatBedNumber(bed) : patient.leito, sector: bed?.setor ?? bed?.tipo ?? patient.setor, condition: patient.condicao }
+    return { id: patient.id, name: patient.nome, bed: bed?.numero ?? patient.leito, sector: bed?.setor ?? bed?.tipo ?? patient.setor, condition: patient.condicao }
   }), [doctorActiveHospitalizations, pacientes, registeredBeds])
   const { readings: liveVitals } = useVitalFeed(monitorPatients.map((patient) => patient.id), token)
   const [activeTab, setActiveTab] = usePanelRoute("medico", ["overview", "atendimento", "monitoramento", "prescricao", "exames", "agenda", "internacao", "atividades", "alertas"] as const, "overview")
@@ -198,7 +198,7 @@ export default function DoctorDashboard({
         paciente: appointment.paciente,
         pacienteId: appointment.pacienteId ?? pacientes.find((patient) => patient.nome === appointment.paciente)?.id ?? "",
         tipo: "Consulta",
-        local: doctorProfile ? formatSpecialty(doctorProfile.especialidade) : "Atendimento médico",
+        local: doctorProfile?.especialidade ?? "Atendimento médico",
         status,
         concluido: status === "Concluída",
         data: appointment.data,
@@ -498,7 +498,7 @@ export default function DoctorDashboard({
         role="Médico"
         initials={userName.split(" ").filter(Boolean).map((part) => part[0]).slice(0, 2).join("").toUpperCase()}
         name={userName}
-        detail={doctorProfile ? formatSpecialty(doctorProfile.especialidade) : "Médico"}
+        detail={doctorProfile?.especialidade ?? "Médico"}
         tabs={tabs}
         activeTab={activeTab}
         onSelect={(key) => setActiveTab(key as Tab)}
@@ -512,7 +512,7 @@ export default function DoctorDashboard({
           role="Médico"
           section={activeTabInfo?.label ?? ""}
           name={userName}
-          detail={doctorProfile ? formatSpecialty(doctorProfile.especialidade) : "Médico"}
+          detail={doctorProfile?.especialidade ?? "Médico"}
           initials={userName.split(" ").filter(Boolean).map((part) => part[0]).slice(0, 2).join("").toUpperCase()}
           theme={theme}
           onToggleTheme={onToggleTheme}
@@ -537,9 +537,9 @@ export default function DoctorDashboard({
           {activeTab === "overview" && (
             <div className="fade-in">
               <HeroHeader
-                eyebrow={`Painel clínico · ${shiftLabel()}`}
+                eyebrow={`Cockpit clínico · ${shiftLabel()}`}
                 title={`${greeting()}, Dr. ${doctorProfile?.nome ?? userName}`}
-                subtitle={`${formatLongLocalDate()} · ${doctorProfile ? formatSpecialty(doctorProfile.especialidade) : "Agenda clínica"}${doctorProfile?.crm ? ` · CRM ${doctorProfile.crm}` : ""}`}
+                subtitle={`${formatLongLocalDate()} · ${doctorProfile?.especialidade ?? "Agenda clínica"}${doctorProfile?.crm ? ` · CRM ${doctorProfile.crm}` : ""}`}
                 aside={
                   <div className="hero-actions grid grid-cols-3 gap-2 lg:flex lg:flex-wrap">
                     <QuickAction variant="hero" icon="prescricao" label="Nova prescrição" onClick={() => openPrescriptionFor(pacientesDoMedico[0]?.id ?? "")} />
@@ -902,7 +902,7 @@ export default function DoctorDashboard({
                 }
               />
               {showPrescriptionForm && (
-                <SectionCard title="Nova prescrição" description="A prescrição será registrada no sistema e vinculada ao atendimento do paciente." icon="prescricao" className="slide-up mb-5">
+                <SectionCard title="Nova prescrição" description="A prescrição será registrada na API e vinculada ao atendimento do paciente." icon="prescricao" className="slide-up mb-5">
                   <form onSubmit={handleSalvarPrescricao} className="flex flex-col gap-5">
                     <FormSection step={1} title="Paciente e medicamento">
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -942,7 +942,7 @@ export default function DoctorDashboard({
                     </FormSection>
                     <div className="flex flex-col-reverse gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: "var(--border)" }}>
                       <p className="flex items-start gap-2 text-xs" style={{ color: "var(--muted-foreground)" }}>
-                        <UiIcon name="info" size={15} /> Confira os dados e a dose antes de salvar. A prescrição será registrada no banco de dados.
+                        <UiIcon name="info" size={15} /> Confira os dados e a dose antes de salvar. A confirmação será persistida no banco.
                       </p>
                       <div className="flex gap-2">
                         <button type="button" onClick={() => setShowPrescriptionForm(false)} className="min-h-11 flex-1 rounded-lg px-4 text-sm font-semibold sm:flex-none" style={{ background: "var(--secondary)", color: "var(--primary)" }}>Cancelar</button>
@@ -1104,7 +1104,7 @@ export default function DoctorDashboard({
                         </label>
                       </div>
                     </FormSection>
-                    <FormSection step={2} title="Dados do exame" description="O exame será vinculado ao paciente, ao médico e ao atendimento no sistema.">
+                    <FormSection step={2} title="Dados do exame" description="A solicitação será vinculada ao paciente, médico e atendimento no banco de dados.">
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                         {examForm.tipo === "ExameLaboratorial" ? <>
                           <label className={labelClass} style={{ color: "var(--foreground)" }}>Amostra
@@ -1206,7 +1206,7 @@ export default function DoctorDashboard({
             <div className="fade-in">
               <PageTitle
                 title="Agenda médica"
-                subtitle={`Consultas atribuídas a ${doctorProfile?.nome ?? userName} · ${doctorProfile ? formatSpecialty(doctorProfile.especialidade) : "agenda médica"}`}
+                subtitle={`Consultas atribuídas a ${doctorProfile?.nome ?? userName} · ${doctorProfile?.especialidade ?? "agenda médica"}`}
                 meta={
                   <>
                     <MetaItem icon="agenda" label="Consultas" value={agendaExibida.length} tone="info" />

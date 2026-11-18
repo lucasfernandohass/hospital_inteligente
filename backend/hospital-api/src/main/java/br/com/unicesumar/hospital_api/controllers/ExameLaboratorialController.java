@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/exames-laboratoriais")
-@PreAuthorize("hasAnyRole('ADMINISTRADOR','MEDICO')")
+@PreAuthorize("hasAnyRole('ADMINISTRADOR','MEDICO','RECEPCIONISTA','ENFERMEIRA')")
 public class ExameLaboratorialController extends AbstractDomainController<DomainRequestDTOs.ExameLaboratorial, DomainResponseDTOs.ExameLaboratorial> {
     public ExameLaboratorialController(ExameLaboratorialService service) { super(service); }
 }

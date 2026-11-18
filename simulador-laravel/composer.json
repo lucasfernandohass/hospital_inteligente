@@ -1,0 +1,10 @@
+{
+    "name": "hospital-inteligente/simulador-sinais",
+    "type": "project",
+    "description": "Simulador de sinais vitais para a API do Hospital Inteligente",
+    "require": {"php": "^8.2", "laravel/framework": "^12.0"},
+    "autoload": {"psr-4": {"App\\": "app/"}},
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "config": {"optimize-autoloader": true, "preferred-install": "dist", "sort-packages": true}
+}

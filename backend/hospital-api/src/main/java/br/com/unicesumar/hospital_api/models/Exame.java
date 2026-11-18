@@ -26,4 +26,13 @@ public abstract class Exame {
 
     @Column(length = 500, nullable = true)
     protected String observacoes;
+
+    @Column(name = "paciente_id")
+    protected Long pacienteId;
+
+    @Column(name = "medico_id")
+    protected Long medicoId;
+
+    @Column(name = "atendimento_id")
+    protected Long atendimentoId;
 }

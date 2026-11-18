@@ -18,12 +18,12 @@ public class ApiAuthorization {
             Map.entry("prescricoes", Set.of("ROLE_MEDICO", "ROLE_ENFERMEIRA")),
             Map.entry("itens-prescricao", Set.of("ROLE_MEDICO", "ROLE_ENFERMEIRA")),
             Map.entry("administracoes-medicamento", Set.of("ROLE_MEDICO", "ROLE_ENFERMEIRA")),
-            Map.entry("exames-imagem", Set.of("ROLE_MEDICO", "ROLE_ENFERMEIRA")),
-            Map.entry("exames-laboratoriais", Set.of("ROLE_MEDICO", "ROLE_ENFERMEIRA")),
+            Map.entry("exames-imagem", Set.of("ROLE_RECEPCIONISTA", "ROLE_MEDICO", "ROLE_ENFERMEIRA")),
+            Map.entry("exames-laboratoriais", Set.of("ROLE_RECEPCIONISTA", "ROLE_MEDICO", "ROLE_ENFERMEIRA")),
             Map.entry("ecgs", Set.of("ROLE_MEDICO", "ROLE_ENFERMEIRA")),
             Map.entry("resultados-exame", Set.of("ROLE_MEDICO", "ROLE_ENFERMEIRA")),
             Map.entry("alertas", Set.of("ROLE_MEDICO", "ROLE_ENFERMEIRA")),
-            Map.entry("registros-clinicos", Set.of("ROLE_MEDICO")),
+            Map.entry("registros-clinicos", Set.of("ROLE_MEDICO", "ROLE_ENFERMEIRA")),
             Map.entry("fichas-atendimento", Set.of("ROLE_RECEPCIONISTA", "ROLE_MEDICO", "ROLE_ENFERMEIRA"))
     );
 

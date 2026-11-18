@@ -46,6 +46,7 @@ export interface StaffPayload {
   coren?: string
   setor?: string
 }
+export type StaffUpdatePayload = Omit<StaffPayload, "senha"> & { senha: string | null }
 
 export interface PatientDto {
   id: number; nome: string; cpf: string; dataNascimento: string; telefone: string | null; endereco: string | null;
@@ -67,6 +68,13 @@ export interface PrescriptionItemDto { id: number; prescricaoId: number; medicam
 export interface MedicationDto { id: number; nome: string; dosagem: string; ativo: boolean }
 export interface MedicationAdministrationDto { id: number; dataHora: string; dose: string; via: string; observacao: string | null; itemPrescricaoId: number; pacienteId: number; administradoPor: number }
 export interface VitalDto { pacienteId: number; leitoId: number; tipo: "TEMPERATURA" | "PRESSAO_SISTOLICA" | "PRESSAO_DIASTOLICA" | "FREQUENCIA_CARDIACA" | "FREQUENCIA_RESPIRATORIA" | "SATURACAO_OXIGENIO"; valor: number; unidade: string; capturadoEm: string }
+export interface AttendanceDto { id: number; data: string; tipo: string; descricao: string; status: string; leitoId: number | null; pacienteId: number; funcionarioResponsavelId: number; medicoResponsavelId: number }
+export interface ClinicalRecordDto { id: number; data: string; descricao: string; anamnese: string | null; exameFisico: string | null; diagnostico: string | null; conduta: string | null; observacao: string | null; medicoId: number; atendimentoId: number }
+export interface AlertDto { id: number; tipo: string; mensagem: string; dataHora: string; nivel: string; ativo: boolean; pacienteId: number }
+export interface ImageExamDto { id: number; dataSolicitacao: string; status: string; observacoes: string | null; modalidade: string; regiaoCorpo: string; arquivoDigital: string | null; pacienteId: number | null; medicoId: number | null; atendimentoId: number | null }
+export interface LabExamDto { id: number; dataSolicitacao: string; status: string; observacoes: string | null; tipoAnalise: string; amostra: string; metodo: string; pacienteId: number | null; medicoId: number | null; atendimentoId: number | null }
+export interface ECGDto { id: number; dataHora: string; frequenciaCardiaca: number; ritmo: string; intervaloPR: number; duracaoQRS: number; eixo: string | null; observacao: string | null; pacienteId: number; atendimentoId: number }
+export interface ActivityDto { id: number; dataHora: string; funcionarioId: number | null; funcionarioNome: string; funcionarioRole: ApiRole; acao: string; entidade: string; detalhes: string | null }
 
 export class ApiError extends Error {
   constructor(message: string, readonly status: number) {
@@ -107,7 +115,7 @@ export const api = {
   createStaff: (payload: StaffPayload, token: string) => request<StaffMember>("/api/funcionarios", {
     method: "POST", body: JSON.stringify(payload),
   }, token),
-  updateStaff: (id: number, payload: StaffPayload, token: string) => request<StaffMember>(`/api/funcionarios/${id}`, {
+  updateStaff: (id: number, payload: StaffUpdatePayload, token: string) => request<StaffMember>(`/api/funcionarios/${id}`, {
     method: "PUT", body: JSON.stringify(payload),
   }, token),
   deleteStaff: (id: number, token: string) => request<void>(`/api/funcionarios/${id}`, { method: "DELETE" }, token),
@@ -124,13 +132,32 @@ export const api = {
   updateInternment: (id: number, payload: Omit<InternmentDto, "id">, token: string) => request<InternmentDto>(`/api/internacoes/${id}`, { method: "PUT", body: JSON.stringify(payload) }, token),
   listAppointments: (token: string) => request<AppointmentDto[]>("/api/agendamentos", {}, token),
   createAppointment: (payload: Omit<AppointmentDto, "id">, token: string) => request<AppointmentDto>("/api/agendamentos", { method: "POST", body: JSON.stringify(payload) }, token),
+  updateAppointment: (id: number, payload: Omit<AppointmentDto, "id">, token: string) => request<AppointmentDto>(`/api/agendamentos/${id}`, { method: "PUT", body: JSON.stringify(payload) }, token),
   listDoctors: (token: string) => request<DoctorDto[]>("/api/medicos", {}, token),
+  listAttendances: (token: string) => request<AttendanceDto[]>("/api/atendimentos", {}, token),
+  createAttendance: (payload: Omit<AttendanceDto, "id">, token: string) => request<AttendanceDto>("/api/atendimentos", { method: "POST", body: JSON.stringify(payload) }, token),
+  listClinicalRecords: (token: string) => request<ClinicalRecordDto[]>("/api/registros-clinicos", {}, token),
+  createClinicalRecord: (payload: Omit<ClinicalRecordDto, "id">, token: string) => request<ClinicalRecordDto>("/api/registros-clinicos", { method: "POST", body: JSON.stringify(payload) }, token),
+  listAlerts: (token: string) => request<AlertDto[]>("/api/alertas", {}, token),
+  updateAlert: (id: number, payload: Omit<AlertDto, "id">, token: string) => request<AlertDto>(`/api/alertas/${id}`, { method: "PUT", body: JSON.stringify(payload) }, token),
+  listImageExams: (token: string) => request<ImageExamDto[]>("/api/exames-imagem", {}, token),
+  createImageExam: (payload: Omit<ImageExamDto, "id">, token: string) => request<ImageExamDto>("/api/exames-imagem", { method: "POST", body: JSON.stringify(payload) }, token),
+  updateImageExam: (id: number, payload: Omit<ImageExamDto, "id">, token: string) => request<ImageExamDto>(`/api/exames-imagem/${id}`, { method: "PUT", body: JSON.stringify(payload) }, token),
+  listLabExams: (token: string) => request<LabExamDto[]>("/api/exames-laboratoriais", {}, token),
+  createLabExam: (payload: Omit<LabExamDto, "id">, token: string) => request<LabExamDto>("/api/exames-laboratoriais", { method: "POST", body: JSON.stringify(payload) }, token),
+  updateLabExam: (id: number, payload: Omit<LabExamDto, "id">, token: string) => request<LabExamDto>(`/api/exames-laboratoriais/${id}`, { method: "PUT", body: JSON.stringify(payload) }, token),
+  listECGs: (token: string) => request<ECGDto[]>("/api/ecgs", {}, token),
   listPrescriptions: (token: string) => request<PrescriptionDto[]>("/api/prescricoes", {}, token),
+  createPrescription: (payload: Omit<PrescriptionDto, "id">, token: string) => request<PrescriptionDto>("/api/prescricoes", { method: "POST", body: JSON.stringify(payload) }, token),
   listPrescriptionItems: (token: string) => request<PrescriptionItemDto[]>("/api/itens-prescricao", {}, token),
+  createPrescriptionItem: (payload: Omit<PrescriptionItemDto, "id">, token: string) => request<PrescriptionItemDto>("/api/itens-prescricao", { method: "POST", body: JSON.stringify(payload) }, token),
   listMedications: (token: string) => request<MedicationDto[]>("/api/medicamentos", {}, token),
+  createMedication: (payload: Omit<MedicationDto, "id">, token: string) => request<MedicationDto>("/api/medicamentos", { method: "POST", body: JSON.stringify(payload) }, token),
   listMedicationAdministrations: (token: string) => request<MedicationAdministrationDto[]>("/api/administracoes-medicamento", {}, token),
   createMedicationAdministration: (payload: Omit<MedicationAdministrationDto, "id">, token: string) => request<MedicationAdministrationDto>("/api/administracoes-medicamento", { method: "POST", body: JSON.stringify(payload) }, token),
   getCurrentVitals: (patientId: string, token: string) => request<VitalDto[]>(`/api/pacientes/${patientId}/sinais-vitais/atuais`, {}, token),
+  listActivities: (token: string) => request<ActivityDto[]>("/api/atividades", {}, token),
+  createActivity: (payload: Pick<ActivityDto, "acao" | "entidade" | "detalhes">, token: string) => request<ActivityDto>("/api/atividades", { method: "POST", body: JSON.stringify(payload) }, token),
 }
 
 export function screenForRole(role: ApiRole) {

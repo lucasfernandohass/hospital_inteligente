@@ -284,10 +284,7 @@ export default function ReceptionistDashboard({
   const pacientesDisponiveisParaInternacao = pacientesCadastrados.filter((patient) => !leitos.some((bed) => bed.status === "Ocupado" && bed.pacienteId === patient.id))
   const historicoPaciente = (patientId: string) => [
     ...agendamentos.filter((item) => item.pacienteId === patientId).map((item) => ({ data: new Date(`${item.data}T12:00:00`).toLocaleDateString("pt-BR"), tipo: "Consulta", medico: medicoPorId(item.medicoId)?.nome ?? "Médico", local: "Agenda médica" })),
-    ...internacoesLocais.filter((item) => item.pacienteId === patientId).map((item) => {
-      const bed = leitos.find((current) => current.id === item.leitoId)
-      return { data: item.dataEntrada, tipo: item.status === "Ativa" ? "Internação ativa" : "Internação", medico: item.medico, local: `Leito ${bed ? formatBedNumber(bed) : item.leito}` }
-    }),
+    ...internacoesLocais.filter((item) => item.pacienteId === patientId).map((item) => ({ data: item.dataEntrada, tipo: item.status === "Ativa" ? "Internação ativa" : "Internação", medico: item.medico, local: `Leito ${item.leito}` })),
   ].sort((a, b) => b.data.localeCompare(a.data))
 
   // ----------------------------------------------------------
@@ -538,9 +535,9 @@ export default function ReceptionistDashboard({
   const leitosEmManutencao = contarLeitos("Manutenção")
   const examesPendentes = examesDaRecepcao.filter((exam) => exam.status === "agendado").length
   const avisos = [
-    leitosAguardandoHigienizacao > 0 && { tone: "warning" as Tone, icon: "clock", text: `${leitosAguardandoHigienizacao} leito${leitosAguardandoHigienizacao === 1 ? "" : "s"} aguardando liberação após higienização`, action: () => { setFiltroStatus("Higienização"); setActiveTab("mapa-leitos") } },
-    leitosEmManutencao > 0 && { tone: "neutral" as Tone, icon: "shield", text: `${leitosEmManutencao} leito${leitosEmManutencao === 1 ? "" : "s"} em manutenção`, action: () => { setFiltroStatus("Manutenção"); setActiveTab("mapa-leitos") } },
-    examesPendentes > 0 && { tone: "info" as Tone, icon: "exames", text: `${examesPendentes} exame${examesPendentes === 1 ? "" : "s"} solicitado${examesPendentes === 1 ? "" : "s"} pelos médicos`, action: undefined },
+    contarLeitos("Higienização") > 0 && { tone: "warning" as Tone, icon: "clock", text: `${contarLeitos("Higienização")} leito(s) aguardando liberação após higienização`, action: () => { setFiltroStatus("Higienização"); setActiveTab("mapa-leitos") } },
+    contarLeitos("Manutenção") > 0 && { tone: "neutral" as Tone, icon: "shield", text: `${contarLeitos("Manutenção")} leito(s) em manutenção`, action: () => { setFiltroStatus("Manutenção"); setActiveTab("mapa-leitos") } },
+    examesDaRecepcao.filter((exam) => exam.status === "agendado").length > 0 && { tone: "info" as Tone, icon: "exames", text: `${examesDaRecepcao.filter((exam) => exam.status === "agendado").length} exame(s) solicitado(s) pelos médicos`, action: undefined },
     leitosDisponiveis.length === 0 && { tone: "danger" as Tone, icon: "alert", text: "Nenhum leito disponível para novas internações", action: () => setActiveTab("mapa-leitos") },
   ].filter((item): item is { tone: Tone; icon: string; text: string; action: (() => void) | undefined } => Boolean(item))
   const enviarFicha = (pacienteId: string, numeroLeito: string) => {
@@ -595,7 +592,7 @@ export default function ReceptionistDashboard({
               >
                 <div className="keep-2-cols grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
                   <HeroStat label="Consultas hoje" value={consultasHoje.length} hint={`${consultasHoje.filter((item) => (item.status ?? "Agendada") === "Agendada").length} aguardando`} />
-                  <HeroStat label="Exames solicitados" value={examesDaRecepcao.length} hint="Solicitações registradas no sistema" />
+                  <HeroStat label="Exames solicitados" value={examesDaRecepcao.length} hint="Dados registrados na API" />
                   <HeroStat label="Leitos disponíveis" value={leitosDisponiveis.length} hint={`de ${leitos.length} leitos`} alert={leitosDisponiveis.length === 0} />
                   <HeroStat label="Pacientes internados" value={leitosOcupados.length} hint={`Ocupação de ${ocupacaoPercentual}%`} />
                 </div>

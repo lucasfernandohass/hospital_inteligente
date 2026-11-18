@@ -17,7 +17,7 @@ import { formatLongLocalDate } from "./appointmentStore"
 import { type RegisteredBed, type RegisteredPatient } from "./patientStore"
 import { usePanelRoute } from "../hooks/usePanelRoute"
 import { api, ApiError } from "../services/api"
-import { formatBedNumber, mapBed, mapClinicalEvolutions, mapInternment, mapPatient } from "../services/mappers"
+import { mapBed, mapClinicalEvolutions, mapInternment, mapPatient } from "../services/mappers"
 import { mapPrescriptions } from "../services/mappers"
 import { useVitalFeed } from "../hooks/useVitalFeed"
 
@@ -116,7 +116,7 @@ export default function NurseDashboard({
     return [{
       id: registered.id, nome: registered.nome, idade, sexo: registered.sexo,
       condicao: admission.motivo, status: "sem avaliação", avatar: registered.nome.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase(),
-      leito: bed ? formatBedNumber(bed) : admission.leito, ala: bed?.setor ?? bed?.tipo ?? admission.setor,
+      leito: bed?.numero ?? admission.leito, ala: bed?.setor ?? bed?.tipo ?? admission.setor,
       risco: "unknown", prescricaoAtiva: apiPrescriptions.some((item) => item.pacienteId === registered.id),
       medico: admission.medico, entrada: admission.dataEntrada,
     }]
@@ -306,18 +306,8 @@ export default function NurseDashboard({
   const riskTone = (risk: string): Tone => (risk === "high" ? "danger" : risk === "medium" ? "warning" : risk === "low" ? "success" : "neutral")
   const riskLabel = (risk: string) => riskColor[risk as keyof typeof riskColor]?.label ?? "Sem leitura"
   const riskIcon = (risk: string) => (risk === "high" ? "alert" : risk === "medium" ? "info" : risk === "low" ? "checkCircle" : "info")
-  const latestVitalsFor = (id: string) => {
-    const saved = evolucoesPorPaciente[id]?.find((entry) => entry.fc !== undefined || entry.temp !== undefined || entry.spo2 !== undefined || entry.pressao !== undefined)
-    const live = liveVitals[id]
-    if (!live || [live.heartRate, live.temperature, live.oxygen, live.systolic, live.diastolic].every((value) => value === undefined)) return saved
-    return {
-      ...saved,
-      fc: live.heartRate ?? saved?.fc,
-      temp: live.temperature ?? saved?.temp,
-      spo2: live.oxygen ?? saved?.spo2,
-      pressao: live.systolic !== undefined && live.diastolic !== undefined ? `${live.systolic}/${live.diastolic}` : saved?.pressao,
-    }
-  }
+  const latestVitalsFor = (id: string) =>
+    evolucoesPorPaciente[id]?.find((entry) => entry.fc !== undefined || entry.spo2 !== undefined || entry.pressao !== undefined)
   const pendingFor = (id: string) => (prescricoesEquipe[id] ?? []).filter((item) => item.status !== "administrado" && !administrados.includes(item.id))
   const doseStatus = (item: PrescricaoItem) => {
     const status = administrados.includes(item.id) ? "administrado" : item.status
