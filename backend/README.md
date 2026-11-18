@@ -121,10 +121,10 @@ Resposta `200 OK`: contagens dos registros criados e situação de cada conta. `
 ```json
 {
   "funcionariosCriados": 3,
-  "pacientesCriados": 3,
-  "leitosCriados": 3,
+  "pacientesCriados": 7,
+  "leitosCriados": 9,
   "internacoesCriadas": 2,
-  "agendamentosCriados": 1,
+  "agendamentosCriados": 2,
   "contas": [
     {
       "nome": "Otavio Alves Brisky",
@@ -137,7 +137,7 @@ Resposta `200 OK`: contagens dos registros criados e situação de cada conta. `
 }
 ```
 
-As datas do dataset são relativas à execução: internações usam `diasDesdeInternacao` e `diasAteAltaPrevista`; agendamentos usam `diasAteAgendamento`. Assim, novos registros continuam aparecendo como atuais mesmo quando o arquivo for reutilizado mais tarde.
+As datas do dataset são relativas à execução: internações usam `diasDesdeInternacao` e `diasAteAltaPrevista`; agendamentos usam `diasAteAgendamento`. No arquivo atual, os offsets de 3 e 4 dias correspondem a 20 e 21/11/2026 quando enviado em 17/11/2026; em outra data, as consultas acompanham a data de execução. Assim, novos registros continuam aparecendo como atuais mesmo quando o arquivo for reutilizado mais tarde.
 
 #### Login
 
@@ -237,6 +237,39 @@ Os erros usam o formato `ProblemDetail` com `status` e `detail`.
 | `409 Conflict` | Dados duplicados ou violação de integridade |
 | `422 Unprocessable Entity` | Regra de negócio não atendida |
 | `500 Internal Server Error` | Erro inesperado |
+
+### Limites de sinais vitais
+
+Os limites padrão do hospital são compartilhados por todos os pacientes. Médicos e profissionais de enfermagem podem criar limites personalizados por paciente; pacientes sem personalização continuam usando o padrão. O monitoramento e a classificação de risco nas abas clínicas usam a mesma configuração.
+
+| Método | Endpoint | Permissão | Uso |
+|---|---|---|---|
+| `GET` | `/api/configuracoes/limites-sinais-vitais` | Administrador, Médico ou Enfermeira | Consulta os limites padrão |
+| `PUT` | `/api/configuracoes/limites-sinais-vitais` | Administrador | Atualiza os limites padrão |
+| `GET` | `/api/pacientes/{id}/limites-sinais-vitais` | Administrador, Médico ou Enfermeira | Consulta os limites efetivos do paciente |
+| `PUT` | `/api/pacientes/{id}/limites-sinais-vitais` | Administrador, Médico ou Enfermeira | Salva uma personalização |
+| `DELETE` | `/api/pacientes/{id}/limites-sinais-vitais` | Administrador, Médico ou Enfermeira | Remove a personalização e restaura o padrão |
+
+O corpo de `PUT` contém limites separados de alerta e crítico. FC e pressão sistólica usam limites mínimo/máximo; SpO₂, frequência respiratória e temperatura usam o limite aplicável. A API valida que os limites críticos sejam mais amplos que os de alerta e registra o funcionário e horário da alteração.
+
+```json
+{
+  "fcAlertaMin": 50,
+  "fcAlertaMax": 110,
+  "fcCriticoMin": 40,
+  "fcCriticoMax": 130,
+  "spo2AlertaMin": 92,
+  "spo2CriticoMin": 88,
+  "frAlertaMax": 24,
+  "frCriticoMax": 30,
+  "temperaturaAlertaMax": 38,
+  "temperaturaCriticoMax": 39,
+  "paSistolicaAlertaMax": 140,
+  "paSistolicaCriticoMax": 180
+}
+```
+
+`GET /api/pacientes/{id}/limites-sinais-vitais` retorna os valores efetivos e o campo `personalizado`, indicando se o paciente usa um override. A configuração pela tela de Monitoramento é persistida e vale também nas abas Internações e Internados.
 
 ## Swagger UI
 

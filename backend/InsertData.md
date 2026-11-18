@@ -19,7 +19,7 @@
       "dataNascimento": "1989-03-15",
       "telefone": "44998887766",
       "endereco": "Rua das Flores, 120",
-      "matricula": "REC-DEMO-001",
+      "matricula": "REC-001",
       "dataAdmissao": "2024-01-10",
       "email": "otavio@gmail.com",
       "senha": "SenhaLocalForte123",
@@ -32,12 +32,12 @@
       "dataNascimento": "1982-06-21",
       "telefone": "44997776655",
       "endereco": "Av. Brasil, 450",
-      "matricula": "MED-DEMO-001",
+      "matricula": "MED-001",
       "dataAdmissao": "2023-05-08",
       "email": "danilo@gmail.com",
       "senha": "SenhaLocalForte123",
       "role": "MEDICO",
-      "crm": "CRM-DEMO-001",
+      "crm": "CRM-001",
       "especialidade": "Clínica Médica"
     },
     {
@@ -46,12 +46,12 @@
       "dataNascimento": "1990-11-02",
       "telefone": "44996665544",
       "endereco": "Rua Paraná, 80",
-      "matricula": "ENF-DEMO-001",
+      "matricula": "ENF-001",
       "dataAdmissao": "2023-08-14",
       "email": "ana@gmail.com",
       "senha": "SenhaLocalForte123",
       "role": "ENFERMEIRA",
-      "coren": "COREN-DEMO-001",
+      "coren": "COREN-001",
       "setor": "Enfermagem"
     }
   ],
@@ -62,7 +62,7 @@
       "dataNascimento": "1980-03-15",
       "telefone": "44995554433",
       "endereco": "Rua A, 10",
-      "numeroProntuario": "DEMO-PR-001",
+      "numeroProntuario": "PR-001",
       "convenio": "Particular",
       "sexo": "M"
     },
@@ -72,7 +72,7 @@
       "dataNascimento": "1972-08-10",
       "telefone": "44994443322",
       "endereco": "Rua B, 20",
-      "numeroProntuario": "DEMO-PR-002",
+      "numeroProntuario": "PR-002",
       "convenio": "Unimed",
       "sexo": "F"
     },
@@ -82,71 +82,176 @@
       "dataNascimento": "1995-01-22",
       "telefone": "44993332211",
       "endereco": "Rua C, 30",
-      "numeroProntuario": "DEMO-PR-003",
+      "numeroProntuario": "PR-003",
       "convenio": "Particular",
+      "sexo": "M"
+    },
+    {
+      "nome": "Sofia Martins",
+      "cpf": "43857219041",
+      "dataNascimento": "1996-07-14",
+      "telefone": "44992223344",
+      "endereco": "Rua dos Ipês, 45",
+      "numeroProntuario": "PR-004",
+      "convenio": "Unimed",
+      "sexo": "F"
+    },
+    {
+      "nome": "Gustavo Almeida",
+      "cpf": "72916384022",
+      "dataNascimento": "1988-12-03",
+      "telefone": "44991112233",
+      "endereco": "Avenida das Palmeiras, 210",
+      "numeroProntuario": "PR-005",
+      "convenio": "Particular",
+      "sexo": "M"
+    },
+    {
+      "nome": "Helena Costa",
+      "cpf": "51683927095",
+      "dataNascimento": "1967-02-25",
+      "telefone": "44990001122",
+      "endereco": "Rua das Acácias, 88",
+      "numeroProntuario": "PR-006",
+      "convenio": "SUS",
+      "sexo": "F"
+    },
+    {
+      "nome": "Ricardo Nunes",
+      "cpf": "84271635090",
+      "dataNascimento": "2001-09-11",
+      "telefone": "44993334455",
+      "endereco": "Rua São Lucas, 132",
+      "numeroProntuario": "PR-007",
+      "convenio": "Unimed",
       "sexo": "M"
     }
   ],
   "leitos": [
     {
-      "numero": "DEMO-UTI-01",
+      "numero": "UTI-001",
       "andar": 1,
-      "quarto": "DEMO-01",
+      "quarto": "101",
       "tipo": "UTI",
       "status": "Ocupado",
-      "observacao": "Leito de demonstração",
+      "observacao": "Leito adulto com monitorização contínua",
       "setor": "UTI"
     },
     {
-      "numero": "DEMO-ENF-01",
+      "numero": "CM-001",
       "andar": 2,
-      "quarto": "DEMO-02",
+      "quarto": "201",
       "tipo": "Enfermaria",
       "status": "Ocupado",
-      "observacao": "Leito de demonstração",
+      "observacao": "Leito de internação clínica",
       "setor": "Clínica Médica"
     },
     {
-      "numero": "DEMO-ENF-02",
+      "numero": "CM-002",
       "andar": 2,
-      "quarto": "DEMO-03",
+      "quarto": "202",
       "tipo": "Enfermaria",
       "status": "Disponível",
-      "observacao": "Leito livre para demonstração",
+      "observacao": "Disponível para novas internações",
       "setor": "Clínica Médica"
+    },
+    {
+      "numero": "UTI-002",
+      "andar": 1,
+      "quarto": "102",
+      "tipo": "UTI",
+      "status": "Disponível",
+      "observacao": "Leito adulto com monitorização contínua",
+      "setor": "UTI"
+    },
+    {
+      "numero": "CM-003",
+      "andar": 2,
+      "quarto": "203",
+      "tipo": "Enfermaria",
+      "status": "Disponível",
+      "observacao": "Leito de internação clínica",
+      "setor": "Clínica Médica"
+    },
+    {
+      "numero": "CM-004",
+      "andar": 2,
+      "quarto": "204",
+      "tipo": "Enfermaria",
+      "status": "Disponível",
+      "observacao": "Leito de internação clínica",
+      "setor": "Clínica Médica"
+    },
+    {
+      "numero": "CARD-001",
+      "andar": 3,
+      "quarto": "301",
+      "tipo": "Enfermaria",
+      "status": "Disponível",
+      "observacao": "Leito para acompanhamento cardiológico",
+      "setor": "Cardiologia"
+    },
+    {
+      "numero": "PED-001",
+      "andar": 4,
+      "quarto": "401",
+      "tipo": "Enfermaria",
+      "status": "Disponível",
+      "observacao": "Leito de internação pediátrica",
+      "setor": "Pediatria"
+    },
+    {
+      "numero": "ISO-001",
+      "andar": 2,
+      "quarto": "205",
+      "tipo": "Isolamento",
+      "status": "Disponível",
+      "observacao": "Leito para precauções de isolamento",
+      "setor": "Infectologia"
     }
   ],
   "internacoes": [
     {
-      "numeroProntuario": "DEMO-PR-001",
-      "numeroLeito": "DEMO-UTI-01",
+      "numeroProntuario": "PR-001",
+      "numeroLeito": "UTI-001",
       "emailMedico": "danilo@gmail.com",
       "diasDesdeInternacao": 6,
       "diasAteAltaPrevista": 5,
-      "motivo": "Observação clínica de demonstração",
-      "observacoes": "Registro criado pelo dataset de teste."
+      "motivo": "Acompanhamento de quadro clínico agudo",
+      "observacoes": "Monitorização e avaliação diária pela equipe assistencial."
     },
     {
-      "numeroProntuario": "DEMO-PR-002",
-      "numeroLeito": "DEMO-ENF-01",
+      "numeroProntuario": "PR-002",
+      "numeroLeito": "CM-001",
       "emailMedico": "danilo@gmail.com",
       "diasDesdeInternacao": 3,
       "diasAteAltaPrevista": 4,
-      "motivo": "Recuperação clínica de demonstração",
-      "observacoes": "Registro criado pelo dataset de teste."
+      "motivo": "Recuperação clínica em acompanhamento",
+      "observacoes": "Evolução acompanhada pela equipe assistencial."
     }
   ],
   "agendamentos": [
     {
-      "chave": "consulta-demo-pr-003",
-      "numeroProntuario": "DEMO-PR-003",
+      "chave": "CONSULTA-003",
+      "numeroProntuario": "PR-003",
       "emailMedico": "danilo@gmail.com",
-      "diasAteAgendamento": 1,
+      "diasAteAgendamento": 3,
       "horario": "09:30:00",
       "duracao": 30,
       "status": "AGENDADA",
       "tipo": "Consulta",
-      "observacoes": "Consulta de demonstração."
+      "observacoes": "Consulta de retorno para avaliação clínica."
+    },
+    {
+      "chave": "CONSULTA-004",
+      "numeroProntuario": "PR-004",
+      "emailMedico": "danilo@gmail.com",
+      "diasAteAgendamento": 4,
+      "horario": "14:30:00",
+      "duracao": 30,
+      "status": "AGENDADA",
+      "tipo": "Consulta",
+      "observacoes": "Consulta para avaliação clínica."
     }
   ]
 }
