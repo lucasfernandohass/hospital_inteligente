@@ -9,7 +9,7 @@ use Throwable;
 
 class SimulateVitalSigns extends Command
 {
-    protected $signature = 'simulator:vitals {--patient= : ID do paciente internado} {--scenario= : estavel, febre, dessaturacao, hipertensao ou deterioracao_recuperacao} {--interval= : intervalo em segundos} {--once : envia somente um lote}';
+    protected $signature = 'simulator:vitals {--patient= : ID do paciente internado} {--scenario= : estavel, febre, dessaturacao, hipertensao, deterioracao_recuperacao ou apresentacao} {--interval= : intervalo em segundos} {--once : envia somente um lote}';
     protected $description = 'Gera e envia sinais vitais simulados para a API Java';
 
     public function handle(VitalSignsGenerator $generator, VitalSignsSender $sender): int

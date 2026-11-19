@@ -15,11 +15,12 @@ class SimulationRunner
 
         try {
             $patients = app(JavaApiClient::class)->pacientesInternados();
+            usort($patients, fn (array $a, array $b) => $a['id'] <=> $b['id']);
             $step = (int) ($state['step'] ?? 0);
             $sentCount = 0;
 
-            foreach ($patients as $patient) {
-                $values = app(VitalSignsGenerator::class)->generate($state['scenario'], $step);
+            foreach ($patients as $index => $patient) {
+                $values = app(VitalSignsGenerator::class)->generate($state['scenario'], $step, $index);
                 app(VitalSignsSender::class)->send($patient['id'], $values);
                 $sentCount++;
             }

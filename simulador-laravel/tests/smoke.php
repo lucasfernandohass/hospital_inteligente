@@ -38,6 +38,18 @@ $casos = [
         verificar($pico['SATURACAO_OXIGENIO'] < min($inicio['SATURACAO_OXIGENIO'], $recuperado['SATURACAO_OXIGENIO']),
             'Sem deterioração e recuperação da saturação');
     },
+    'apresentacao comeca estavel e altera dois pacientes com sinais diferentes' => static function () use ($gerador): void {
+        foreach ([0, 1, 2] as $paciente) {
+            $inicio = $gerador->generate('apresentacao', 0, $paciente);
+            verificar($inicio['TEMPERATURA'] < 37.5 && $inicio['SATURACAO_OXIGENIO'] >= 96, 'Apresentação não começa estável');
+        }
+        $febre = $gerador->generate('apresentacao', 20, 0);
+        $dessaturacao = $gerador->generate('apresentacao', 20, 1);
+        $outro = $gerador->generate('apresentacao', 20, 2);
+        verificar($febre['TEMPERATURA'] > 39 && $febre['SATURACAO_OXIGENIO'] >= 96, 'Primeiro paciente sem febre isolada');
+        verificar($dessaturacao['SATURACAO_OXIGENIO'] < 88 && $dessaturacao['TEMPERATURA'] < 37.5, 'Segundo paciente sem dessaturação isolada');
+        verificar($outro['TEMPERATURA'] < 37.5 && $outro['SATURACAO_OXIGENIO'] >= 96, 'Terceiro paciente deveria seguir estável');
+    },
     'rejeita cenario desconhecido' => static function () use ($gerador): void {
         try {
             $gerador->generate('fora-do-contrato', 0);

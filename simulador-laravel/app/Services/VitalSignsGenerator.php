@@ -5,7 +5,7 @@ namespace App\Services;
 class VitalSignsGenerator
 {
     /** @return array<string, float|int> */
-    public function generate(string $scenario, int $step): array
+    public function generate(string $scenario, int $step, int $patientIndex = 0): array
     {
         $baseline = [
             'TEMPERATURA' => 36.8,
@@ -21,6 +21,7 @@ class VitalSignsGenerator
             'dessaturacao' => ['SATURACAO_OXIGENIO' => 88, 'FREQUENCIA_RESPIRATORIA' => 26, 'FREQUENCIA_CARDIACA' => 104],
             'hipertensao' => ['PRESSAO_SISTOLICA' => 178, 'PRESSAO_DIASTOLICA' => 108, 'FREQUENCIA_CARDIACA' => 96],
             'deterioracao_recuperacao' => $this->deteriorationProfile($step),
+            'apresentacao' => $this->presentationProfile($step, $patientIndex),
             'estavel' => [],
             default => throw new \InvalidArgumentException("Cenário desconhecido: {$scenario}"),
         };
@@ -50,6 +51,30 @@ class VitalSignsGenerator
             'FREQUENCIA_RESPIRATORIA' => 16 + 14 * $severity,
             'SATURACAO_OXIGENIO' => 98 - 12 * $severity,
         ];
+    }
+
+    /**
+     * Todos começam saudáveis; o 1º internado evolui para febre a partir do ciclo 6
+     * e o 2º para dessaturação a partir do ciclo 10. Os demais seguem estáveis.
+     *
+     * @return array<string, float|int>
+     */
+    private function presentationProfile(int $step, int $patientIndex): array
+    {
+        $ramp = static fn (int $start): float => min(1, max(0, ($step - $start + 1) / 3));
+
+        return match ($patientIndex) {
+            0 => [
+                'TEMPERATURA' => 36.8 + 2.6 * $ramp(6),
+                'FREQUENCIA_CARDIACA' => 76 + 40 * $ramp(6),
+            ],
+            1 => [
+                'SATURACAO_OXIGENIO' => 98 - 12 * $ramp(10),
+                'FREQUENCIA_RESPIRATORIA' => 16 + 11 * $ramp(10),
+                'FREQUENCIA_CARDIACA' => 76 + 30 * $ramp(10),
+            ],
+            default => [],
+        };
     }
 
     private function noise(float $amplitude): float

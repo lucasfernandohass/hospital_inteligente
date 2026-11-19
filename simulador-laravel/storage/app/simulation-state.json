@@ -1,10 +1,10 @@
 {
     "running": true,
-    "scenario": "febre",
-    "startedAt": "2026-10-19T21:47:00-03:00",
-    "lastCycleAt": "2026-10-19T21:47:26-03:00",
+    "scenario": "apresentacao",
+    "startedAt": "2026-11-19T18:00:00-03:00",
+    "lastCycleAt": "2026-11-19T18:04:52-03:00",
     "lastError": null,
-    "step": 6,
-    "lastSentCount": 1,
-    "activePatients": 1
+    "step": 57,
+    "lastSentCount": 3,
+    "activePatients": 3
 }

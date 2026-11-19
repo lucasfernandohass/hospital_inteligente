@@ -23,7 +23,7 @@ class SimulationController
     public function start(Request $request, SimulationState $state): JsonResponse
     {
         $validated = $request->validate([
-            'scenario' => ['sometimes', 'string', Rule::in(['estavel', 'febre', 'dessaturacao', 'hipertensao', 'deterioracao_recuperacao'])],
+            'scenario' => ['sometimes', 'string', Rule::in(['estavel', 'febre', 'dessaturacao', 'hipertensao', 'deterioracao_recuperacao', 'apresentacao'])],
         ]);
 
         try {
